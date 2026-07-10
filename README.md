@@ -141,6 +141,26 @@ python -m eval.evaluate
 
 Esto corre las 10 preguntas del golden dataset contra el retriever (Recall@K) y contra el pipeline completo con LLM-as-judge (Faithfulness), e imprime el score final de cada métrica.
 
+### 2.8 UI web — ver el pipeline en tiempo real
+
+Además del CLI, el proyecto tiene una UI web (`web/`) pensada para el mismo objetivo educativo: mostrar gráficamente, paso a paso y en tiempo real, qué hace el sistema tanto al construir el índice (ingestión) como al responder una pregunta (retrieval + generación), incluyendo cómo el texto se convierte en vectores y cómo se guardan.
+
+```bash
+python -m web.server
+# o, equivalente:
+uvicorn web.server:app --reload
+```
+
+Después abrí [http://127.0.0.1:8000](http://127.0.0.1:8000) en el navegador. Requiere el mismo `.env` con `OPENAI_API_KEY` que el CLI (ver 2.3). **La interfaz de la UI web está en inglés** (pensada para compartirse), aunque la base de conocimiento y las respuestas del asistente siguen en español — la UI lo aclara en un banner. La UI tiene tres pestañas:
+
+- **Build the Index**: botón para (re)construir el índice, con un diagrama animado (Documents → Chunking → Embeddings → Index saved) que se va iluminando en vivo, mostrando cuántos chunks salió de cada documento y el progreso de cada batch de embeddings.
+- **Ask a Question**: hacé una pregunta y mirá en vivo el diagrama (Question → Embedding → Search → Top-K → Prompt → LLM → Answer), el embedding de tu pregunta como una tira de color, la similitud coseno de **todos** los chunks contra tu pregunta (con los top-K resaltados, para ver por qué ganaron sobre el resto), el prompt final armado con el contexto citado, y la respuesta apareciendo en streaming real token por token.
+- **Explore the Data**: navegá los 9 documentos, mirá exactamente en qué rango de palabras se cortó cada chunk (con el overlap resaltado), y — una vez construido el índice — inspeccioná el vector real guardado para cualquier chunk (dimensión, norma, y los 1536 números crudos). Un visor de código muestra el **código fuente real** de `chunking`, `embeddings`, `vector_store` y `_build_prompt`, obtenido en vivo con `inspect.getsource()` — nunca una copia que se pueda desincronizar del código que corrió de verdad.
+
+Internamente, `src/ingest.py`, `src/retriever.py` y `src/rag.py` aceptan un parámetro opcional `on_event` (default `None`) que emite eventos de progreso; el CLI y `eval/evaluate.py` no lo usan y siguen funcionando exactamente igual que antes. `src/chunking.py` expone además `chunk_spans()` (rangos de palabras por chunk, usado para el visor de "Explore"). El server (`web/server.py`) es la única parte del proyecto que sabe de FastAPI: traduce esos eventos a Server-Sent Events (SSE) para el frontend estático (`web/static/`, HTML/CSS/JS plano, sin build step), y expone además endpoints de solo lectura para navegar documentos/chunks/vectores/código, todos con whitelist (nunca se arma un path ni se evalúa un símbolo a partir de input del cliente).
+
+**Nota de seguridad si pensás hostear esto públicamente en internet** (más allá de compartir el repo para que cada quien lo corra local): tal como está, cualquiera que llegue a la URL puede disparar `/api/ingest/stream` y `/api/ask/stream`, que hacen llamadas reales — y pagas — a la API de OpenAI. Antes de exponerlo en un servidor público hace falta agregar rate-limiting, un tope de costo, o autenticación.
+
 ---
 
 ## 3. Cómo extenderlo (para la conversación de entrevista)

@@ -1,13 +1,12 @@
 """
-Vector store mínimo, casero, basado en numpy.
+Minimal, homemade vector store, built on numpy.
 
-En producción esto sería Pinecone, Weaviate o Chroma (bases de datos
-vectoriales de verdad, con índices aproximados tipo HNSW para buscar rápido
-sobre millones de vectores). Acá lo hacemos a mano con una matriz numpy y
-similitud coseno por fuerza bruta, porque con un puñado de documentos
-alcanza y de paso se ve exactamente qué hace un vector store por dentro:
-guardar vectores + su metadata, y devolver los más parecidos a un vector
-de consulta.
+In production this would be Pinecone, Weaviate or Chroma (real vector
+databases, with approximate indexes like HNSW to search fast over millions
+of vectors). Here we do it by hand with a numpy matrix and brute-force
+cosine similarity, because a handful of documents is plenty, and it shows
+exactly what a vector store does under the hood: store vectors + their
+metadata, and return the ones most similar to a query vector.
 """
 from __future__ import annotations
 
@@ -19,13 +18,13 @@ import numpy as np
 
 class SimpleVectorStore:
     def __init__(self):
-        self.vectors: np.ndarray | None = None   # matriz (n_chunks, dim)
-        self.metadata: list[dict] = []            # una entrada de metadata por chunk
+        self.vectors: np.ndarray | None = None   # matrix (n_chunks, dim)
+        self.metadata: list[dict] = []            # one metadata entry per chunk
 
     def add(self, vectors: list[list[float]], metadatas: list[dict]) -> None:
         arr = np.array(vectors, dtype=np.float32)
-        # Normalizamos cada vector para que el producto punto sea
-        # directamente equivalente a similitud coseno.
+        # Normalize each vector so the dot product is directly equivalent
+        # to cosine similarity.
         arr = arr / np.linalg.norm(arr, axis=1, keepdims=True)
         if self.vectors is None:
             self.vectors = arr
@@ -38,7 +37,7 @@ class SimpleVectorStore:
             return []
         q = np.array(query_vector, dtype=np.float32)
         q = q / np.linalg.norm(q)
-        scores = self.vectors @ q  # similitud coseno de la query contra cada chunk
+        scores = self.vectors @ q  # cosine similarity of the query against every chunk
         top_idx = np.argsort(-scores)[:top_k]
         return [
             {**self.metadata[i], "score": float(scores[i])}

@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>RAG Live — see how retrieval-augmented generation actually works</title>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-title">
+    <span class="dot"></span>
+    <h1>RAG Live</h1>
+    <span class="subtitle">A real, runnable RAG pipeline — watch every step happen</span>
+  </div>
+  <div id="status-banner" class="status-banner status-unknown">Checking status…</div>
+</header>
+
+<p class="lang-note">
+  This is an educational demo (source on
+  <a href="https://github.com/kyberis/rag-training" target="_blank" rel="noopener">GitHub</a>).
+  The interface is in English, but the knowledge base and the assistant's answers are in
+  <strong>Spanish</strong> — the demo simulates a Spanish-language patient-support bot for a
+  synthetic healthcare-booking platform. That's intentional: the point is to see how the
+  <em>pipeline</em> works, not to read the sample content.
+</p>
+
+<nav class="tabs">
+  <button class="tab-btn active" data-tab="init">1. Build the Index</button>
+  <button class="tab-btn" data-tab="ask">2. Ask a Question</button>
+  <button class="tab-btn" data-tab="explore">3. Explore the Data</button>
+</nav>
+
+<main>
+  <!-- ======================= TAB: BUILD THE INDEX ======================= -->
+  <section id="tab-init" class="tab-panel active">
+    <p class="hint">
+      This runs the <strong>offline</strong> pipeline: it reads the knowledge-base documents,
+      splits them into overlapping fragments (chunks), turns each one into a vector
+      (<span class="term-tooltip" tabindex="0" data-tooltip="An embedding is a list of numbers (typically 1000+) produced by a neural network. Texts with similar meaning end up close together in that number-space — that's what lets us search by meaning instead of exact keywords.">embedding</span>)
+      with the OpenAI API, and saves everything to a vector index on disk. This runs once, or
+      whenever the documents change.
+    </p>
+
+    <div class="panel">
+      <div class="panel-row">
+        <button id="btn-ingest" class="btn btn-primary">Build index</button>
+        <span id="ingest-progress" class="progress-text"></span>
+      </div>
+
+      <div class="pipeline" id="pipeline-init">
+        <div class="pbox" data-box="documents">
+          <div class="pbox-icon">📄</div>
+          <div class="pbox-label">Documents</div>
+          <div class="pbox-detail" data-detail="documents">—</div>
+        </div>
+        <div class="parrow">→</div>
+        <div class="pbox" data-box="chunking">
+          <div class="pbox-icon">✂️</div>
+          <div class="pbox-label">Chunking
+            <span class="info-icon" tabindex="0" data-tooltip="Each document is split into overlapping word windows (180 words each, 40-word overlap here) so no chunk is too long for the embedding model, and no answer gets cut in half right at a chunk boundary.">ⓘ</span>
+          </div>
+          <div class="pbox-detail" data-detail="chunking">—</div>
+        </div>
+        <div class="parrow">→</div>
+        <div class="pbox" data-box="embeddings">
+          <div class="pbox-icon">🧮</div>
+          <div class="pbox-label">Embeddings</div>
+          <div class="pbox-detail" data-detail="embeddings">—</div>
+        </div>
+        <div class="parrow">→</div>
+        <div class="pbox" data-box="index">
+          <div class="pbox-icon">🗂️</div>
+          <div class="pbox-label">Index saved
+            <span class="info-icon" tabindex="0" data-tooltip="A vector store: a database specialized in storing vectors and finding the ones closest to a query vector — instead of matching exact keywords like a normal database.">ⓘ</span>
+          </div>
+          <div class="pbox-detail" data-detail="index">—</div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>Documents and their chunks</h3>
+          <div id="doc-list" class="doc-list">
+            <p class="muted">Documents will appear here once you start building the index.</p>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Embedding batches</h3>
+          <div id="batch-list" class="batch-list">
+            <p class="muted">Each chunk is sent to the OpenAI API in batches of up to 100.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <details class="log-details" open>
+      <summary>Raw event log</summary>
+      <div id="log-init" class="event-log"></div>
+    </details>
+  </section>
+
+  <!-- ======================= TAB: ASK A QUESTION ======================= -->
+  <section id="tab-ask" class="tab-panel">
+    <p class="hint">
+      This runs the <strong>online</strong> pipeline: your question becomes a vector, gets
+      compared against every chunk in the index by
+      <span class="term-tooltip" tabindex="0" data-tooltip="Cosine similarity: a score from -1 to 1 measuring the angle between two vectors. 1 means they point in the same direction (very similar meaning), 0 means unrelated, -1 means opposite.">cosine similarity</span>,
+      the best matches (top-K) are assembled into a
+      <span class="term-tooltip" tabindex="0" data-tooltip="The final block of text actually sent to the LLM: your question plus the retrieved chunks as context, with instructions on how to answer.">prompt</span>,
+      and the LLM answers citing its source.
+    </p>
+
+    <div class="panel">
+      <div class="panel-row">
+        <input id="question-input" type="text" placeholder="Type your question (in Spanish — that's what the knowledge base is written in)…" autocomplete="off" />
+        <button id="btn-ask" class="btn btn-primary">Ask</button>
+      </div>
+      <p id="ask-disabled-hint" class="muted small" hidden>
+        Build the index first, in the "Build the Index" tab.
+      </p>
+
+      <div class="pipeline" id="pipeline-ask">
+        <div class="pbox" data-box="question">
+          <div class="pbox-icon">❓</div>
+          <div class="pbox-label">Question</div>
+        </div>
+        <div class="parrow">→</div>
+        <div class="pbox" data-box="embedding">
+          <div class="pbox-icon">🧮</div>
+          <div class="pbox-label">Embedding</div>
+        </div>
+        <div class="parrow">→</div>
+        <div class="pbox" data-box="search">
+          <div class="pbox-icon">🔍</div>
+          <div class="pbox-label">Search</div>
+        </div>
+        <div class="parrow">→</div>
+        <div class="pbox" data-box="topk">
+          <div class="pbox-icon">🏆</div>
+          <div class="pbox-label">Top-K
+            <span class="info-icon" tabindex="0" data-tooltip="Only the K highest-scoring chunks (K=4 by default) are kept as context — everything else is discarded, even chunks with a decent score.">ⓘ</span>
+          </div>
+        </div>
+        <div class="parrow">→</div>
+        <div class="pbox" data-box="prompt">
+          <div class="pbox-icon">📝</div>
+          <div class="pbox-label">Prompt</div>
+        </div>
+        <div class="parrow">→</div>
+        <div class="pbox" data-box="llm">
+          <div class="pbox-icon">🤖</div>
+          <div class="pbox-label">LLM
+            <span class="info-icon" tabindex="0" data-tooltip="temperature=0 is used here, which makes the model deterministic — the same input reliably produces the same output. Good for a support bot that shouldn't improvise.">ⓘ</span>
+          </div>
+        </div>
+        <div class="parrow">→</div>
+        <div class="pbox" data-box="answer">
+          <div class="pbox-icon">💬</div>
+          <div class="pbox-label">Answer
+            <span class="info-icon" tabindex="0" data-tooltip="The answer streams in token by token as the model generates it (via OpenAI's streaming API), instead of waiting for the full response before showing anything.">ⓘ</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Your question, turned into a vector</h3>
+        <p class="muted small">
+          The embedding has <span id="embedding-dim">1536</span> dimensions — the first 32 are
+          shown here as a color strip by magnitude, just to make "it's a vector" tangible.
+        </p>
+        <div id="embedding-strip" class="embedding-strip"></div>
+      </div>
+
+      <div class="card">
+        <h3>Similarity against every chunk in the index</h3>
+        <p class="muted small">
+          Bar length = cosine similarity with your question. The highlighted ones are the top-K
+          picked to build the context — everything else gets discarded.
+        </p>
+        <div id="score-bars" class="score-bars">
+          <p class="muted">Scores will appear here as soon as they're computed.</p>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>The assembled prompt
+            <span class="info-icon" tabindex="0" data-tooltip="System prompt: instructions given to the LLM before the conversation starts, defining its role and constraints — here, 'only answer from the given context'.">ⓘ</span>
+          </h3>
+          <details id="prompt-details">
+            <summary>View full prompt (context + question)</summary>
+            <pre id="prompt-text" class="code-block"></pre>
+          </details>
+        </div>
+        <div class="card">
+          <h3>Assistant's answer</h3>
+          <div id="answer-text" class="answer-box">—</div>
+          <div id="sources-chips" class="chips"></div>
+        </div>
+      </div>
+    </div>
+
+    <details class="log-details">
+      <summary>Raw event log</summary>
+      <div id="log-ask" class="event-log"></div>
+    </details>
+  </section>
+
+  <!-- ======================= TAB: EXPLORE THE DATA ======================= -->
+  <section id="tab-explore" class="tab-panel">
+    <p class="hint">
+      Browse the raw material: pick a document, see exactly how it was cut into chunks
+      (including the overlap between them), and — once the index is built — inspect the real
+      vector stored for each chunk. Every code panel below shows the <strong>actual Python
+      source</strong> that ran, fetched live from the server, not a copy that can drift out of
+      sync.
+    </p>
+
+    <div class="panel">
+      <div class="card">
+        <h3>1. Pick a document</h3>
+        <div id="explore-doc-picker" class="doc-picker"></div>
+      </div>
+
+      <div id="explore-doc-detail" class="card" hidden>
+        <h3>Document <span id="explore-doc-title"></span></h3>
+        <details>
+          <summary>View raw text</summary>
+          <pre id="explore-doc-text" class="code-block"></pre>
+        </details>
+      </div>
+
+      <div id="explore-chunks-card" class="card" hidden>
+        <h3>2. How it was split into chunks
+          <span class="info-icon" tabindex="0" data-tooltip="Computed live via chunking.chunk_spans() — the same function the real ingestion pipeline uses. Word ranges show exactly where each chunk starts and ends in the original document.">ⓘ</span>
+        </h3>
+        <div id="explore-chunks-list" class="chunk-list"></div>
+      </div>
+
+      <div class="card">
+        <h3>3. See the code
+          <span class="info-icon" tabindex="0" data-tooltip="Fetched live from the running server with Python's inspect.getsource() — this is guaranteed to be the exact code that produced everything you see on this page, not a hand-written copy.">ⓘ</span>
+        </h3>
+        <div class="code-picker" id="code-picker">
+          <button class="chip-btn active" data-code-key="chunking">Chunking</button>
+          <button class="chip-btn" data-code-key="embeddings">Embeddings</button>
+          <button class="chip-btn" data-code-key="vector_store_add">Storing vectors</button>
+          <button class="chip-btn" data-code-key="vector_store_search">Searching vectors</button>
+          <button class="chip-btn" data-code-key="prompt">Building the prompt</button>
+        </div>
+        <div id="code-viewer" class="code-viewer"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>

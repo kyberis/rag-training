@@ -1,10 +1,10 @@
 """
-Wrapper delgado sobre la API de embeddings de OpenAI.
+Thin wrapper around the OpenAI embeddings API.
 
-Aislar esto en su propio módulo (en vez de llamar a la API desde todos
-lados) es lo que permite cambiar de proveedor de embeddings (Cohere, un
-modelo local, Voyage) tocando un solo archivo, sin tener que salir a
-modificar ingest.py, retriever.py, etc.
+Isolating this in its own module (instead of calling the API from
+everywhere) is what lets you swap embedding providers (Cohere, a local
+model, Voyage) by touching a single file, without having to go modify
+ingest.py, retriever.py, etc.
 """
 from __future__ import annotations
 
@@ -28,14 +28,14 @@ def _get_client() -> OpenAI:
 
 
 def embed_texts(texts: list[str]) -> list[list[float]]:
-    """Embebe una lista de textos en un solo request (batch).
+    """Embed a list of texts in a single request (batch).
 
-    Mandar varios textos juntos es más barato y más rápido que un request
-    por chunk — importante cuando el knowledge base tiene miles de chunks.
+    Sending several texts together is cheaper and faster than one request
+    per chunk — important once the knowledge base has thousands of chunks.
     """
     client = _get_client()
     response = client.embeddings.create(model=config.EMBEDDING_MODEL, input=texts)
-    # La API devuelve los resultados en el mismo orden que la lista de entrada.
+    # The API returns results in the same order as the input list.
     return [item.embedding for item in response.data]
 
 
