@@ -5,7 +5,7 @@ const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
 // ---------------------------------------------------------------- tabs ----
 
-let exploreInitialized = false;
+let exploreCodeInitialized = false;
 
 $$(".tab-btn").forEach((btn) => {
   btn.addEventListener("click", () => {
@@ -13,10 +13,18 @@ $$(".tab-btn").forEach((btn) => {
     $$(".tab-panel").forEach((p) => p.classList.remove("active"));
     btn.classList.add("active");
     $(`#tab-${btn.dataset.tab}`).classList.add("active");
-    if (btn.dataset.tab === "explore" && !exploreInitialized) {
-      exploreInitialized = true;
+    if (btn.dataset.tab === "explore") {
+      // Refresh every time (not just the first visit): if the index got
+      // rebuilt in the other tab in the meantime, a stale "not built yet"
+      // or stale chunk list would be actively misleading here.
+      renderDbSummary($("#db-summary"));
       loadDocPicker();
-      loadCodeSnippet("chunking");
+      $("#explore-doc-detail").hidden = true;
+      $("#explore-chunks-card").hidden = true;
+      if (!exploreCodeInitialized) {
+        exploreCodeInitialized = true;
+        loadCodeSnippet("chunking"); // code never changes at runtime — fetch once, cache
+      }
     }
   });
 });
@@ -81,6 +89,19 @@ function setBoxDetail(boxName, text) {
   if (el) el.textContent = text;
 }
 
+function setAskBoxDetail(boxName, text) {
+  const el = $(`.pbox-detail[data-detail-ask="${boxName}"]`);
+  if (el) el.textContent = text;
+}
+
+function flashCard(card) {
+  card.classList.remove("flash");
+  // Force a reflow so re-adding the class restarts the animation even if
+  // the same card was just flashed a moment ago.
+  void card.offsetWidth;
+  card.classList.add("flash");
+}
+
 function fmtTs(ts) {
   const d = new Date(ts * 1000);
   return d.toLocaleTimeString("en-GB", { hour12: false }) + "." + String(d.getMilliseconds()).padStart(3, "0");
@@ -119,6 +140,205 @@ function renderEmbeddingStripInto(container, preview) {
   });
 }
 
+// ------------------------------------------------- click-a-box-to-inspect -
+//
+// Every pbox in both pipelines is clickable. Boxes that already have a rich
+// visualization further down the page (embedding strip, score bars, prompt,
+// answer, doc/batch lists) scroll to and flash that existing card, instead
+// of duplicating the same data in a second place. Boxes with no dedicated
+// card of their own (Index saved, Question, LLM) show their raw output in
+// a small shared panel below the diagram.
+
+const askBoxPayloads = new Map(); // boxName -> [{event, payload}, ...]
+
+function recordBoxPayload(map, boxName, eventName, payload) {
+  if (!map.has(boxName)) map.set(boxName, []);
+  map.get(boxName).push({ event: eventName, payload });
+}
+
+function hideBoxOutput(prefix) {
+  const panel = $(`#${prefix}-box-output`);
+  panel.hidden = true;
+  $$(`#pipeline-${prefix} .pbox.selected`).forEach((b) => b.classList.remove("selected"));
+}
+
+function selectBox(prefix, boxName) {
+  $$(`#pipeline-${prefix} .pbox`).forEach((b) => b.classList.remove("selected"));
+  const box = $(`#pipeline-${prefix} .pbox[data-box="${boxName}"]`);
+  if (box) box.classList.add("selected");
+}
+
+function showRawBoxOutput(prefix, boxName, title, entries) {
+  selectBox(prefix, boxName);
+  const panel = $(`#${prefix}-box-output`);
+  const content = $(".box-output-content", panel);
+  $(".box-output-title", panel).textContent = title;
+  content.innerHTML = "";
+  if (!entries || entries.length === 0) {
+    const msg = document.createElement("p");
+    msg.className = "muted";
+    msg.textContent = prefix === "init"
+      ? "Run the ingestion first — click \"Build index\" above."
+      : "Ask a question first — click \"Ask\" above.";
+    content.appendChild(msg);
+  } else {
+    entries.forEach(({ event, payload }) => {
+      const name = document.createElement("div");
+      name.className = "snippet-name";
+      name.textContent = event;
+      const pre = document.createElement("pre");
+      pre.className = "code-block";
+      pre.textContent = JSON.stringify(payload, null, 2);
+      content.appendChild(name);
+      content.appendChild(pre);
+    });
+  }
+  panel.hidden = false;
+  panel.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+function scrollToBoxCard(prefix, boxName, cardEl) {
+  selectBox(prefix, boxName);
+  $(`#${prefix}-box-output`).hidden = true;
+  if (cardEl.tagName === "DETAILS" || $("details", cardEl)) {
+    const details = cardEl.tagName === "DETAILS" ? cardEl : $("details", cardEl);
+    if (details) details.open = true;
+  }
+  cardEl.scrollIntoView({ behavior: "smooth", block: "center" });
+  flashCard(cardEl);
+}
+
+async function renderDbSummary(container) {
+  container.innerHTML = "";
+  const loading = document.createElement("p");
+  loading.className = "muted";
+  loading.textContent = "Loading…";
+  container.appendChild(loading);
+
+  let data;
+  try {
+    const res = await fetch("/api/kb/index");
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      container.innerHTML = "";
+      const msg = document.createElement("p");
+      msg.className = "muted";
+      msg.textContent = err.detail || "Index not built yet — build it in the \"Build the Index\" tab first.";
+      container.appendChild(msg);
+      return;
+    }
+    data = await res.json();
+  } catch (err) {
+    container.innerHTML = "";
+    const msg = document.createElement("p");
+    msg.className = "muted";
+    msg.textContent = "Could not load the index summary.";
+    container.appendChild(msg);
+    return;
+  }
+
+  container.innerHTML = "";
+
+  const summary = document.createElement("p");
+  summary.className = "db-summary-line";
+  const nVec = document.createElement("strong");
+  nVec.textContent = data.n_vectors;
+  const dim = document.createElement("strong");
+  dim.textContent = data.dim;
+  const dtype = document.createElement("strong");
+  dtype.textContent = data.dtype;
+  const path1 = document.createElement("span");
+  path1.className = "db-path";
+  path1.textContent = data.vectors_path;
+  const path2 = document.createElement("span");
+  path2.className = "db-path";
+  path2.textContent = data.meta_path;
+  summary.append(
+    nVec, " vectors × ", dim, " dimensions (dtype ", dtype, "), stored as two plain files: ",
+    path1, " (the vectors, a NumPy array) and ", path2,
+    " (a JSON list with one entry per chunk: source, chunk_index, and its text — n_words below is computed, not a stored field)."
+  );
+  container.appendChild(summary);
+
+  const wrap = document.createElement("div");
+  wrap.className = "db-table-wrap";
+  const table = document.createElement("table");
+  table.className = "db-table";
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  ["#", "source", "chunk_index", "n_words"].forEach((h) => {
+    const th = document.createElement("th");
+    th.textContent = h;
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+  const tbody = document.createElement("tbody");
+  data.chunks.forEach((c, i) => {
+    const tr = document.createElement("tr");
+    const tdRow = document.createElement("td");
+    tdRow.textContent = i;
+    const tdSource = document.createElement("td");
+    tdSource.className = "db-source";
+    tdSource.textContent = c.source;
+    const tdIdx = document.createElement("td");
+    tdIdx.textContent = c.chunk_index;
+    const tdWords = document.createElement("td");
+    tdWords.textContent = c.n_words;
+    tr.append(tdRow, tdSource, tdIdx, tdWords);
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+  container.appendChild(wrap);
+}
+
+function handleInitBoxClick(boxName) {
+  if (boxName === "documents" || boxName === "chunking") {
+    scrollToBoxCard("init", boxName, $("#doc-list").closest(".card"));
+  } else if (boxName === "embeddings") {
+    scrollToBoxCard("init", boxName, $("#batch-list").closest(".card"));
+  } else if (boxName === "index") {
+    selectBox("init", boxName);
+    const panel = $("#init-box-output");
+    $(".box-output-title", panel).textContent = "Index saved — what's in the database";
+    panel.hidden = false;
+    renderDbSummary($(".box-output-content", panel)); // asks the server directly, so it's accurate even before this page ever ran an ingestion
+    panel.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+}
+
+function handleAskBoxClick(boxName) {
+  const cardTargets = {
+    embedding: () => $("#embedding-strip").closest(".card"),
+    search: () => $("#score-bars").closest(".card"),
+    topk: () => $("#score-bars").closest(".card"),
+    prompt: () => $("#prompt-details"),
+    answer: () => $("#answer-text").closest(".card"),
+  };
+  if (cardTargets[boxName]) {
+    scrollToBoxCard("ask", boxName, cardTargets[boxName]());
+    return;
+  }
+  // "question" and "llm" have no dedicated card further down — show their
+  // raw event payload in the shared panel instead.
+  const title = boxName === "question" ? "Question received" : "LLM call";
+  showRawBoxOutput("ask", boxName, title, askBoxPayloads.get(boxName));
+}
+
+$$("#pipeline-init .pbox").forEach((box) => {
+  box.addEventListener("click", () => handleInitBoxClick(box.dataset.box));
+  box.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleInitBoxClick(box.dataset.box); }
+  });
+});
+$$("#pipeline-ask .pbox").forEach((box) => {
+  box.addEventListener("click", () => handleAskBoxClick(box.dataset.box));
+  box.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleAskBoxClick(box.dataset.box); }
+  });
+});
+
 // ============================================================ INGEST =====
 
 const docRows = new Map();
@@ -133,6 +353,7 @@ function resetIngestUI() {
   docRows.clear();
   batchRows.clear();
   $("#ingest-progress").textContent = "";
+  hideBoxOutput("init");
 }
 
 function startIngest() {
@@ -264,6 +485,9 @@ function resetAskUI() {
   $("#answer-text").textContent = "";
   $("#sources-chips").innerHTML = "";
   $("#log-ask").innerHTML = "";
+  ["question", "embedding", "search", "topk", "prompt", "llm", "answer"].forEach((b) => setAskBoxDetail(b, "—"));
+  askBoxPayloads.clear();
+  hideBoxOutput("ask");
 }
 
 function renderScoreBars(allScores, topKSources) {
@@ -330,8 +554,11 @@ function askQuestion() {
   };
 
   es.addEventListener("question_received", (e) => {
-    appendLog("log-ask", "question_received", JSON.parse(e.data));
+    const payload = JSON.parse(e.data);
+    appendLog("log-ask", "question_received", payload);
+    recordBoxPayload(askBoxPayloads, "question", "question_received", payload);
     setBoxState("pipeline-ask", "question", "done");
+    setAskBoxDetail("question", payload.question.length > 28 ? payload.question.slice(0, 28) + "…" : payload.question);
   });
 
   es.addEventListener("embedding_query_start", (e) => {
@@ -343,6 +570,7 @@ function askQuestion() {
     const payload = JSON.parse(e.data);
     appendLog("log-ask", "embedding_query_done", payload);
     setBoxState("pipeline-ask", "embedding", "done");
+    setAskBoxDetail("embedding", `${payload.dim} dims`);
     $("#embedding-dim").textContent = payload.dim;
     renderEmbeddingStripInto($("#embedding-strip"), payload.preview);
   });
@@ -356,9 +584,11 @@ function askQuestion() {
     const payload = JSON.parse(e.data);
     appendLog("log-ask", "search_done", payload);
     setBoxState("pipeline-ask", "search", "done");
+    setAskBoxDetail("search", `${payload.all_scores.length} chunks scored`);
     setBoxState("pipeline-ask", "topk", "active");
     renderScoreBars(payload.all_scores, payload.top_k_sources);
     setBoxState("pipeline-ask", "topk", "done");
+    setAskBoxDetail("topk", `${payload.top_k_sources.length} selected`);
   });
 
   es.addEventListener("no_context", (e) => {
@@ -370,13 +600,18 @@ function askQuestion() {
     const payload = JSON.parse(e.data);
     appendLog("log-ask", "prompt_built", payload);
     setBoxState("pipeline-ask", "prompt", "done");
+    setAskBoxDetail("prompt", `${payload.prompt.length} chars`);
     $("#prompt-text").textContent = `[SYSTEM]\n${payload.system_prompt}\n\n[USER]\n${payload.prompt}`;
   });
 
   es.addEventListener("llm_start", (e) => {
-    appendLog("log-ask", "llm_start", JSON.parse(e.data));
+    const payload = JSON.parse(e.data);
+    appendLog("log-ask", "llm_start", payload);
+    recordBoxPayload(askBoxPayloads, "llm", "llm_start", payload);
     setBoxState("pipeline-ask", "llm", "active");
     setBoxState("pipeline-ask", "answer", "active");
+    setAskBoxDetail("llm", payload.model);
+    setAskBoxDetail("answer", "streaming…");
     $("#answer-text").textContent = "";
   });
 
@@ -386,7 +621,9 @@ function askQuestion() {
   });
 
   es.addEventListener("llm_done", (e) => {
-    appendLog("log-ask", "llm_done", JSON.parse(e.data));
+    const payload = JSON.parse(e.data);
+    appendLog("log-ask", "llm_done", payload);
+    recordBoxPayload(askBoxPayloads, "llm", "llm_done", payload);
     setBoxState("pipeline-ask", "llm", "done");
   });
 
@@ -394,6 +631,7 @@ function askQuestion() {
     const payload = JSON.parse(e.data);
     appendLog("log-ask", "answer_done", payload);
     setBoxState("pipeline-ask", "answer", "done");
+    setAskBoxDetail("answer", `${payload.answer.split(/\s+/).length} words`);
     const chips = $("#sources-chips");
     chips.innerHTML = "";
     payload.sources.forEach((src) => {

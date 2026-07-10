@@ -48,14 +48,15 @@
         <span id="ingest-progress" class="progress-text"></span>
       </div>
 
+      <p class="muted small click-hint">Click any box below to see exactly what it produced.</p>
       <div class="pipeline" id="pipeline-init">
-        <div class="pbox" data-box="documents">
+        <div class="pbox" data-box="documents" tabindex="0">
           <div class="pbox-icon">📄</div>
           <div class="pbox-label">Documents</div>
           <div class="pbox-detail" data-detail="documents">—</div>
         </div>
         <div class="parrow">→</div>
-        <div class="pbox" data-box="chunking">
+        <div class="pbox" data-box="chunking" tabindex="0">
           <div class="pbox-icon">✂️</div>
           <div class="pbox-label">Chunking
             <span class="info-icon" tabindex="0" data-tooltip="Each document is split into overlapping word windows (180 words each, 40-word overlap here) so no chunk is too long for the embedding model, and no answer gets cut in half right at a chunk boundary.">ⓘ</span>
@@ -63,19 +64,24 @@
           <div class="pbox-detail" data-detail="chunking">—</div>
         </div>
         <div class="parrow">→</div>
-        <div class="pbox" data-box="embeddings">
+        <div class="pbox" data-box="embeddings" tabindex="0">
           <div class="pbox-icon">🧮</div>
           <div class="pbox-label">Embeddings</div>
           <div class="pbox-detail" data-detail="embeddings">—</div>
         </div>
         <div class="parrow">→</div>
-        <div class="pbox" data-box="index">
+        <div class="pbox" data-box="index" tabindex="0">
           <div class="pbox-icon">🗂️</div>
           <div class="pbox-label">Index saved
             <span class="info-icon" tabindex="0" data-tooltip="A vector store: a database specialized in storing vectors and finding the ones closest to a query vector — instead of matching exact keywords like a normal database.">ⓘ</span>
           </div>
           <div class="pbox-detail" data-detail="index">—</div>
         </div>
+      </div>
+
+      <div id="init-box-output" class="card box-output-card" hidden>
+        <h3>Output: <span class="box-output-title"></span></h3>
+        <div class="box-output-content"></div>
       </div>
 
       <div class="grid-2">
@@ -120,47 +126,60 @@
         Build the index first, in the "Build the Index" tab.
       </p>
 
+      <p class="muted small click-hint">Click any box below to see exactly what it produced.</p>
       <div class="pipeline" id="pipeline-ask">
-        <div class="pbox" data-box="question">
+        <div class="pbox" data-box="question" tabindex="0">
           <div class="pbox-icon">❓</div>
           <div class="pbox-label">Question</div>
+          <div class="pbox-detail" data-detail-ask="question">—</div>
         </div>
         <div class="parrow">→</div>
-        <div class="pbox" data-box="embedding">
+        <div class="pbox" data-box="embedding" tabindex="0">
           <div class="pbox-icon">🧮</div>
           <div class="pbox-label">Embedding</div>
+          <div class="pbox-detail" data-detail-ask="embedding">—</div>
         </div>
         <div class="parrow">→</div>
-        <div class="pbox" data-box="search">
+        <div class="pbox" data-box="search" tabindex="0">
           <div class="pbox-icon">🔍</div>
           <div class="pbox-label">Search</div>
+          <div class="pbox-detail" data-detail-ask="search">—</div>
         </div>
         <div class="parrow">→</div>
-        <div class="pbox" data-box="topk">
+        <div class="pbox" data-box="topk" tabindex="0">
           <div class="pbox-icon">🏆</div>
           <div class="pbox-label">Top-K
             <span class="info-icon" tabindex="0" data-tooltip="Only the K highest-scoring chunks (K=4 by default) are kept as context — everything else is discarded, even chunks with a decent score.">ⓘ</span>
           </div>
+          <div class="pbox-detail" data-detail-ask="topk">—</div>
         </div>
         <div class="parrow">→</div>
-        <div class="pbox" data-box="prompt">
+        <div class="pbox" data-box="prompt" tabindex="0">
           <div class="pbox-icon">📝</div>
           <div class="pbox-label">Prompt</div>
+          <div class="pbox-detail" data-detail-ask="prompt">—</div>
         </div>
         <div class="parrow">→</div>
-        <div class="pbox" data-box="llm">
+        <div class="pbox" data-box="llm" tabindex="0">
           <div class="pbox-icon">🤖</div>
           <div class="pbox-label">LLM
             <span class="info-icon" tabindex="0" data-tooltip="temperature=0 is used here, which makes the model deterministic — the same input reliably produces the same output. Good for a support bot that shouldn't improvise.">ⓘ</span>
           </div>
+          <div class="pbox-detail" data-detail-ask="llm">—</div>
         </div>
         <div class="parrow">→</div>
-        <div class="pbox" data-box="answer">
+        <div class="pbox" data-box="answer" tabindex="0">
           <div class="pbox-icon">💬</div>
           <div class="pbox-label">Answer
             <span class="info-icon" tabindex="0" data-tooltip="The answer streams in token by token as the model generates it (via OpenAI's streaming API), instead of waiting for the full response before showing anything.">ⓘ</span>
           </div>
+          <div class="pbox-detail" data-detail-ask="answer">—</div>
         </div>
+      </div>
+
+      <div id="ask-box-output" class="card box-output-card" hidden>
+        <h3>Output: <span class="box-output-title"></span></h3>
+        <div class="box-output-content"></div>
       </div>
 
       <div class="card">
@@ -219,7 +238,14 @@
 
     <div class="panel">
       <div class="card">
-        <h3>1. Pick a document</h3>
+        <h3>1. What's actually stored in "the database"
+          <span class="info-icon" tabindex="0" data-tooltip="There's no real database here — src/vector_store.py just writes two plain files: a NumPy array and a JSON list. This section shows exactly what's in them right now, read fresh from disk on every request.">ⓘ</span>
+        </h3>
+        <div id="db-summary"></div>
+      </div>
+
+      <div class="card">
+        <h3>2. Pick a document</h3>
         <div id="explore-doc-picker" class="doc-picker"></div>
       </div>
 
@@ -232,14 +258,14 @@
       </div>
 
       <div id="explore-chunks-card" class="card" hidden>
-        <h3>2. How it was split into chunks
+        <h3>3. How it was split into chunks
           <span class="info-icon" tabindex="0" data-tooltip="Computed live via chunking.chunk_spans() — the same function the real ingestion pipeline uses. Word ranges show exactly where each chunk starts and ends in the original document.">ⓘ</span>
         </h3>
         <div id="explore-chunks-list" class="chunk-list"></div>
       </div>
 
       <div class="card">
-        <h3>3. See the code
+        <h3>4. See the code
           <span class="info-icon" tabindex="0" data-tooltip="Fetched live from the running server with Python's inspect.getsource() — this is guaranteed to be the exact code that produced everything you see on this page, not a hand-written copy.">ⓘ</span>
         </h3>
         <div class="code-picker" id="code-picker">

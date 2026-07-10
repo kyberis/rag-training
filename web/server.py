@@ -174,6 +174,30 @@ def kb_chunks(source: str | None = None):
     return result
 
 
+@app.get("/api/kb/index")
+def kb_index():
+    """Resumen de lo que hay literalmente persistido en disco: el array de
+    index/vectors.npy y la lista de index/meta.json. Esto es "la base de
+    datos" del proyecto — no hay nada más detrás.
+    """
+    if not config.INDEX_VECTORS_PATH.exists():
+        raise HTTPException(status_code=404, detail="Todavía no se construyó el índice.")
+
+    vectors = np.load(config.INDEX_VECTORS_PATH)
+    meta = _load_index_meta()
+    return {
+        "vectors_path": str(config.INDEX_VECTORS_PATH),
+        "meta_path": str(config.INDEX_META_PATH),
+        "n_vectors": int(vectors.shape[0]),
+        "dim": int(vectors.shape[1]),
+        "dtype": str(vectors.dtype),
+        "chunks": [
+            {"source": m["source"], "chunk_index": m["chunk_index"], "n_words": len(m["text"].split())}
+            for m in meta
+        ],
+    }
+
+
 @app.get("/api/kb/vector")
 def kb_vector(source: str, chunk_index: int):
     """El vector real guardado para un chunk puntual, leído directamente de

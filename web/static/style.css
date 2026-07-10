@@ -157,8 +157,11 @@ main { padding: 0 1.5rem 3rem; max-width: 1100px; margin: 0 auto; }
   border-radius: var(--radius);
   padding: 0.7rem 0.6rem;
   text-align: center;
+  cursor: pointer;
   transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
 }
+.pbox:hover { border-color: var(--accent); }
+.pbox:focus { outline: none; border-color: var(--accent); }
 
 .pbox-icon { font-size: 1.3rem; }
 .pbox-label { font-size: 0.78rem; margin-top: 0.3rem; color: var(--text-muted); }
@@ -176,6 +179,19 @@ main { padding: 0 1.5rem 3rem; max-width: 1100px; margin: 0 auto; }
   border-color: var(--ok);
 }
 .pbox.done .pbox-label { color: var(--text); }
+
+/* Persistent "this is the box whose output you're viewing" marker —
+   independent of the active/done run-state coloring above. */
+.pbox.selected { box-shadow: inset 0 0 0 2px var(--accent); }
+
+.click-hint { margin: 0 0 0.4rem; }
+
+/* Brief highlight used to draw the eye to a card a box click scrolled to. */
+.flash { animation: flash-highlight 1.1s ease; }
+@keyframes flash-highlight {
+  0% { box-shadow: 0 0 0 2px var(--accent); }
+  100% { box-shadow: 0 0 0 2px transparent; }
+}
 
 @keyframes pulse {
   0%, 100% { box-shadow: 0 0 0 3px var(--accent-soft); }
@@ -473,3 +489,38 @@ main { padding: 0 1.5rem 3rem; max-width: 1100px; margin: 0 auto; }
   margin: 0.8rem 0 0.3rem;
 }
 .code-viewer .snippet-name:first-child { margin-top: 0; }
+
+/* --- shared "box output" panel (Build the Index / Ask a Question tabs) --- */
+.box-output-card { border-left: 2px solid var(--accent); }
+.box-output-card h3 { margin-bottom: 0.6rem; }
+.box-output-title { color: var(--accent); font-family: var(--mono); font-weight: 400; }
+.box-output-content .muted { display: block; padding: 0.4rem 0; }
+
+/* --- Explore tab: "what's stored" database summary --- */
+.db-summary-line {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin-bottom: 0.7rem;
+}
+.db-summary-line strong { color: var(--text); }
+.db-summary-line .db-path { font-family: var(--mono); font-size: 0.75rem; }
+.db-table-wrap { max-height: 320px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+.db-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+.db-table th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-card);
+  text-align: left;
+  padding: 0.5rem 0.7rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+.db-table td {
+  padding: 0.4rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  color: var(--text-muted);
+}
+.db-table tr:last-child td { border-bottom: none; }
+.db-table td.db-source { color: var(--text); }
