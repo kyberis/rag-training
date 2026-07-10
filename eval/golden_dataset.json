@@ -1,0 +1,42 @@
+[
+  {
+    "question": "¿Cuánto tiempo antes puedo cancelar una cita sin costo?",
+    "expected_sources": ["02_cancellation_policy.md"]
+  },
+  {
+    "question": "¿Puedo hacer una consulta por videollamada con mi médico?",
+    "expected_sources": ["03_teleconsultation.md"]
+  },
+  {
+    "question": "¿Qué pasa si no me presento a mi turno?",
+    "expected_sources": ["09_no_show_policy.md"]
+  },
+  {
+    "question": "¿Cómo puedo borrar mi cuenta y mis datos personales?",
+    "expected_sources": ["07_account_privacy.md"]
+  },
+  {
+    "question": "¿DocPlanner verifica las credenciales de los médicos antes de publicar su perfil?",
+    "expected_sources": ["05_doctor_profiles_faq.md"]
+  },
+  {
+    "question": "¿Puedo pagar la consulta con tarjeta desde la plataforma?",
+    "expected_sources": ["04_payments_insurance.md"]
+  },
+  {
+    "question": "¿Cómo modera DocPlanner las reseñas de pacientes?",
+    "expected_sources": ["06_reviews_ratings.md"]
+  },
+  {
+    "question": "¿Qué herramientas tiene una clínica para gestionar la agenda de varios médicos?",
+    "expected_sources": ["08_clinic_admin_tims.md"]
+  },
+  {
+    "question": "¿Cómo reservo un turno con un especialista?",
+    "expected_sources": ["01_booking_policy.md"]
+  },
+  {
+    "question": "¿Qué pasa si el médico cancela el turno y no el paciente?",
+    "expected_sources": ["02_cancellation_policy.md"]
+  }
+]
