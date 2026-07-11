@@ -28,7 +28,8 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from eval.evaluate import evaluate_faithfulness, evaluate_recall_at_k, load_golden_dataset
-from src import chunking, config, embeddings, rag, vector_store
+from src import agentic_rag, chunking, config, embeddings, rag, vector_store
+from src.agentic_rag import answer_agentic
 from src.ingest import build_index, load_documents
 from src.rag import answer
 from src.retriever import get_default_store, set_store, similarity_from_indexed_chunk
@@ -49,6 +50,7 @@ CODE_REGISTRY: dict[str, list] = {
     "vector_store_add": [vector_store.SimpleVectorStore.add],
     "vector_store_search": [vector_store.SimpleVectorStore.search],
     "prompt": [rag._build_prompt],
+    "agentic_loop": [agentic_rag.answer_agentic],
 }
 
 
@@ -115,6 +117,7 @@ _EVAL_IP_DAILY_LIMIT = 1       # free live evaluation runs per IP per day
 _SESSION_START_IP_HOURLY_LIMIT = 20  # generous — costs no OpenAI money, just bounds Redis/memory session storage
 _GLOBAL_DAILY_UNIT_BUDGET = 300  # shared "OpenAI call" budget per day, all visitors combined
 _ASK_UNITS = 2                  # 1 embedding call + 1 chat completion call
+_AGENTIC_ASK_UNITS = 9          # worst case: up to 4 chat completions + up to 3+ embedding calls (bounded ReAct loop)
 _INGEST_UNITS = 1               # chunks are embedded in a single batch call
 _EVAL_UNITS = 30                # 10 embeddings + 10 answers + 10 judge calls
 
@@ -541,6 +544,39 @@ def ask_stream(
 
     def target(on_event):
         return answer(question, top_k=top_k, on_event=on_event, api_key=api_key, session_id=x_session_id)
+
+    return run_pipeline_as_sse(target)
+
+
+@app.get("/api/ask/agentic/stream")
+def ask_agentic_stream(
+    request: Request,
+    question: str,
+    top_k: int | None = None,
+    x_openai_key: str | None = Header(default=None, alias="X-OpenAI-Key"),
+    x_session_id: str | None = Header(default=None, alias="X-Session-Id"),
+):
+    """Misma pregunta que /api/ask/stream, pero con el modelo decidiendo vía
+    tool calling si llama a retrieve_context cero, una, o varias veces antes
+    de responder (ReAct) — ver src/agentic_rag.py. Mismas guardas que el
+    modo clásico, pero con su propio peso de rate limit: hasta 4 vueltas del
+    loop, cada una con su propia llamada al modelo y (si pide la
+    herramienta) su propia llamada de embeddings.
+    """
+    if not _has_usable_index(x_session_id):
+        return _immediate_error(
+            "No hay índice construido todavía. Andá a la pestaña 'Inicialización' y construilo primero."
+        )
+    if not x_openai_key:
+        limit_error = _check_rate_limit(request, units=_AGENTIC_ASK_UNITS, is_eval=False)
+        if limit_error:
+            return _immediate_error(limit_error)
+    api_key = _resolve_api_key(x_openai_key)
+    if not api_key:
+        return _immediate_error(NO_KEY_MESSAGE)
+
+    def target(on_event):
+        return answer_agentic(question, top_k=top_k, on_event=on_event, api_key=api_key, session_id=x_session_id)
 
     return run_pipeline_as_sse(target)
 

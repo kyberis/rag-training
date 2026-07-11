@@ -769,3 +769,102 @@ main { padding: 0 1.5rem 3rem; max-width: 1100px; margin: 0 auto; }
   padding: 2rem 0;
   border-top: 1px solid var(--border);
 }
+
+/* --- Ask tab: Classic vs Agentic mode toggle --- */
+.mode-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+.mode-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.mode-btn:hover { border-color: var(--accent); }
+.mode-btn.active { color: var(--accent); background: var(--accent-soft); border-color: var(--accent); }
+
+.ask-mode-panel { display: none; }
+.ask-mode-panel.active { display: block; }
+
+/* --- Ask tab: agentic trace --- */
+.agentic-trace {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  margin: 1rem 0;
+}
+.trace-step {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.8rem 1rem;
+}
+.trace-step-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 0.4rem;
+}
+.trace-step-badge {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 0.05rem 0.55rem;
+}
+.trace-query {
+  margin: 0.3rem 0;
+  font-size: 0.85rem;
+}
+.trace-query .trace-query-text {
+  font-family: var(--mono);
+  color: var(--text);
+}
+.trace-chunks {
+  margin: 0.3rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+.trace-chunks li { margin-bottom: 0.15rem; }
+.trace-decision {
+  margin-top: 0.5rem;
+  font-size: 0.8rem;
+  font-style: italic;
+  color: var(--text-muted);
+}
+.trace-decision.decided { color: var(--ok); font-style: normal; }
+
+/* --- Ask tab: classic vs agentic comparison --- */
+.ask-comparison { border-left: 2px solid var(--accent); }
+.ask-comparison-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+@media (max-width: 720px) { .ask-comparison-grid { grid-template-columns: 1fr; } }
+.ask-comparison-col h4 {
+  font-size: 0.82rem;
+  color: var(--accent);
+  margin: 0 0 0.5rem;
+}
+.ask-comparison-stat {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  padding: 0.2rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.ask-comparison-stat:last-child { border-bottom: none; }
+.ask-comparison-stat strong { color: var(--text); font-family: var(--mono); font-weight: 600; }

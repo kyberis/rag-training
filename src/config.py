@@ -25,6 +25,10 @@ CHUNK_OVERLAP_WORDS = 40    # solapamiento entre chunks consecutivos
 # --- Parámetros de retrieval (ver punto 1: Recall@K) ---
 TOP_K = 4                  # cuántos chunks se recuperan por pregunta
 
+# --- Parámetros de RAG agéntico (ver src/agentic_rag.py) ---
+AGENTIC_TOP_K = 2           # más chico que TOP_K: le da al modelo un motivo real para volver a buscar
+AGENTIC_MAX_ITERATIONS = 4  # tope duro; la última vuelta fuerza tool_choice="none" así siempre termina con una respuesta
+
 # --- Rutas ---
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data" / "docplanner_kb"

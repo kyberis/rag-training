@@ -292,143 +292,198 @@
         Build the index first, in the "Build the Index" tab.
       </p>
 
-      <p class="muted small click-hint">Click any box below to see exactly what it produced.</p>
-      <div class="pipeline" id="pipeline-ask">
-        <div class="pbox" data-box="question" tabindex="0">
-          <div class="pbox-icon">❓</div>
-          <div class="pbox-label">Question</div>
-          <div class="pbox-detail" data-detail-ask="question">—</div>
-        </div>
-        <div class="parrow">→</div>
-        <div class="pbox" data-box="embedding" tabindex="0">
-          <div class="pbox-icon">🧮</div>
-          <div class="pbox-label">Embedding</div>
-          <div class="pbox-detail" data-detail-ask="embedding">—</div>
-        </div>
-        <div class="parrow">→</div>
-        <div class="pbox" data-box="search" tabindex="0">
-          <div class="pbox-icon">🔍</div>
-          <div class="pbox-label">Search</div>
-          <div class="pbox-detail" data-detail-ask="search">—</div>
-        </div>
-        <div class="parrow">→</div>
-        <div class="pbox" data-box="topk" tabindex="0">
-          <div class="pbox-icon">🏆</div>
-          <div class="pbox-label">Top-K
-            <span class="info-icon" tabindex="0" data-tooltip="Only the K highest-scoring chunks (K=4 by default) are kept as context — everything else is discarded, even chunks with a decent score.">ⓘ</span>
+      <div class="mode-tabs">
+        <button class="mode-btn active" data-mode="classic" type="button">Classic RAG</button>
+        <button class="mode-btn" data-mode="agentic" type="button">Agentic RAG</button>
+      </div>
+
+      <!-- ==================== MODE: CLASSIC RAG ==================== -->
+      <div id="ask-mode-classic" class="ask-mode-panel active">
+        <p class="muted small click-hint">Click any box below to see exactly what it produced.</p>
+        <div class="pipeline" id="pipeline-ask">
+          <div class="pbox" data-box="question" tabindex="0">
+            <div class="pbox-icon">❓</div>
+            <div class="pbox-label">Question</div>
+            <div class="pbox-detail" data-detail-ask="question">—</div>
           </div>
-          <div class="pbox-detail" data-detail-ask="topk">—</div>
-        </div>
-        <div class="parrow">→</div>
-        <div class="pbox" data-box="prompt" tabindex="0">
-          <div class="pbox-icon">📝</div>
-          <div class="pbox-label">Prompt</div>
-          <div class="pbox-detail" data-detail-ask="prompt">—</div>
-        </div>
-        <div class="parrow">→</div>
-        <div class="pbox" data-box="llm" tabindex="0">
-          <div class="pbox-icon">🤖</div>
-          <div class="pbox-label">LLM
-            <span class="info-icon" tabindex="0" data-tooltip="temperature=0 is used here, which makes the model deterministic — the same input reliably produces the same output. Good for a support bot that shouldn't improvise.">ⓘ</span>
+          <div class="parrow">→</div>
+          <div class="pbox" data-box="embedding" tabindex="0">
+            <div class="pbox-icon">🧮</div>
+            <div class="pbox-label">Embedding</div>
+            <div class="pbox-detail" data-detail-ask="embedding">—</div>
           </div>
-          <div class="pbox-detail" data-detail-ask="llm">—</div>
-        </div>
-        <div class="parrow">→</div>
-        <div class="pbox" data-box="answer" tabindex="0">
-          <div class="pbox-icon">💬</div>
-          <div class="pbox-label">Answer
-            <span class="info-icon" tabindex="0" data-tooltip="The answer streams in token by token as the model generates it (via OpenAI's streaming API), instead of waiting for the full response before showing anything.">ⓘ</span>
+          <div class="parrow">→</div>
+          <div class="pbox" data-box="search" tabindex="0">
+            <div class="pbox-icon">🔍</div>
+            <div class="pbox-label">Search</div>
+            <div class="pbox-detail" data-detail-ask="search">—</div>
           </div>
-          <div class="pbox-detail" data-detail-ask="answer">—</div>
+          <div class="parrow">→</div>
+          <div class="pbox" data-box="topk" tabindex="0">
+            <div class="pbox-icon">🏆</div>
+            <div class="pbox-label">Top-K
+              <span class="info-icon" tabindex="0" data-tooltip="Only the K highest-scoring chunks (K=4 by default) are kept as context — everything else is discarded, even chunks with a decent score.">ⓘ</span>
+            </div>
+            <div class="pbox-detail" data-detail-ask="topk">—</div>
+          </div>
+          <div class="parrow">→</div>
+          <div class="pbox" data-box="prompt" tabindex="0">
+            <div class="pbox-icon">📝</div>
+            <div class="pbox-label">Prompt</div>
+            <div class="pbox-detail" data-detail-ask="prompt">—</div>
+          </div>
+          <div class="parrow">→</div>
+          <div class="pbox" data-box="llm" tabindex="0">
+            <div class="pbox-icon">🤖</div>
+            <div class="pbox-label">LLM
+              <span class="info-icon" tabindex="0" data-tooltip="temperature=0 is used here, which makes the model deterministic — the same input reliably produces the same output. Good for a support bot that shouldn't improvise.">ⓘ</span>
+            </div>
+            <div class="pbox-detail" data-detail-ask="llm">—</div>
+          </div>
+          <div class="parrow">→</div>
+          <div class="pbox" data-box="answer" tabindex="0">
+            <div class="pbox-icon">💬</div>
+            <div class="pbox-label">Answer
+              <span class="info-icon" tabindex="0" data-tooltip="The answer streams in token by token as the model generates it (via OpenAI's streaming API), instead of waiting for the full response before showing anything.">ⓘ</span>
+            </div>
+            <div class="pbox-detail" data-detail-ask="answer">—</div>
+          </div>
         </div>
-      </div>
 
-      <div id="ask-box-output" class="card box-output-card" hidden>
-        <h3>Output: <span class="box-output-title"></span></h3>
-        <div class="box-output-content"></div>
-      </div>
-
-      <details class="agent-note">
-        <summary>Is this an AI agent that iterates until it's "done"?</summary>
-        <p><strong>No.</strong> The pipeline above runs top to bottom exactly once, no loop-back:
-          one embedding call, one search, one prompt, one generation call. The model never decides
-          to search again, ask a follow-up, or judge whether it has "enough" context — that
-          decision doesn't exist here. This is <strong>classic (non-agentic) RAG</strong>.</p>
-        <p>It's built with the raw <span class="term-tooltip" tabindex="0" data-tooltip="No framework — just client.chat.completions.create() and client.embeddings.create() from the openai Python package. See src/rag.py and src/embeddings.py in the Explore tab's code viewer.">OpenAI Python SDK</span> —
-          <strong>no LangChain, no LangGraph</strong>, no agent framework of any kind.</p>
-        <p>An <em>agentic</em> version would look different: expose <code>retrieve()</code> as a
-          <span class="term-tooltip" tabindex="0" data-tooltip="Giving an LLM a set of callable functions with typed arguments, so it can decide during generation which ones to call and with what input — e.g. OpenAI function calling / tool calling.">tool</span>
-          the model can call zero, one, or several times, and let the model itself decide when it
-          has enough information before answering (the
-          <span class="term-tooltip" tabindex="0" data-tooltip="Reason + Act: a prompting pattern where the model alternates between reasoning about what to do next and taking an action (like calling a tool), observing the result, and repeating — until it decides it's ready to give a final answer.">ReAct pattern</span>).
-          That trades predictability and cost for flexibility — see the Concepts tab for more on
-          both.</p>
-      </details>
-
-      <div class="card">
-        <h3>Your question, turned into a vector</h3>
-        <p class="muted small">
-          The embedding has <span id="embedding-dim">1536</span> dimensions — the first 32 are
-          shown here as a color strip by magnitude, just to make "it's a vector" tangible.
-        </p>
-        <div id="embedding-strip" class="embedding-strip"></div>
-      </div>
-
-      <div class="card">
-        <h3>Similarity against every chunk in the index</h3>
-        <p class="muted small">
-          Bar length = cosine similarity with your question. The highlighted ones are the top-K
-          picked to build the context — everything else gets discarded.
-        </p>
-        <div id="score-bars" class="score-bars">
-          <p class="muted">Scores will appear here as soon as they're computed.</p>
+        <div id="ask-box-output" class="card box-output-card" hidden>
+          <h3>Output: <span class="box-output-title"></span></h3>
+          <div class="box-output-content"></div>
         </div>
-      </div>
 
-      <div class="card">
-        <h3>Vector map — where your question landed
-          <span class="info-icon" tabindex="0" data-tooltip="Every chunk's real 1536-dimension vector is compressed down to 2 dimensions with PCA (principal component analysis) just so it can be drawn on a flat plane. Distances here are a rough approximation of the real embedding space — useful for intuition, not the literal geometry the model uses.">ⓘ</span>
-        </h3>
-        <p class="muted small">
-          Every dot is a chunk in the index, projected into the same 2D space as your question
-          (the ⭐). The dashed lines connect it to the real top-K chunks — the ones actually used
-          as context — highlighted in blue. Click any dot to make <em>it</em> the reference point
-          and see its real cosine distance to every other chunk (a fresh search, from that
-          chunk's own stored vector — no extra OpenAI call needed); hover any dot for the exact
-          number. Drag to pan, scroll/pinch to zoom.
-        </p>
-        <div class="vector-map-toolbar">
-          <button id="vector-map-reset-view" class="btn-chip" type="button">Reset view</button>
-          <button id="vector-map-reset-ref" class="btn-chip" type="button" hidden>← Back to your question</button>
-          <span id="vector-map-ref-label" class="muted small"></span>
-        </div>
-        <div id="vector-map" class="vector-map">
-          <p class="muted">The map will appear here once a search runs.</p>
-        </div>
-      </div>
+        <details class="agent-note">
+          <summary>Is this an AI agent that iterates until it's "done"?</summary>
+          <p><strong>Not in this mode.</strong> The pipeline above runs top to bottom exactly once,
+            no loop-back: one embedding call, one search, one prompt, one generation call. The
+            model never decides to search again, ask a follow-up, or judge whether it has "enough"
+            context — that decision doesn't exist here. This is <strong>classic (non-agentic)
+            RAG</strong>.</p>
+          <p>It's built with the raw <span class="term-tooltip" tabindex="0" data-tooltip="No framework — just client.chat.completions.create() and client.embeddings.create() from the openai Python package. See src/rag.py and src/embeddings.py in the Explore tab's code viewer.">OpenAI Python SDK</span> —
+            <strong>no LangChain, no LangGraph</strong>, no agent framework of any kind.</p>
+          <p>Switch to <a href="#tab-ask" data-tab-link="ask" data-mode="agentic"><strong>Agentic
+            RAG</strong></a> above to see a real version of this: <code>retrieve()</code> exposed
+            as a <span class="term-tooltip" tabindex="0" data-tooltip="Giving an LLM a set of callable functions with typed arguments, so it can decide during generation which ones to call and with what input — e.g. OpenAI function calling / tool calling.">tool</span>
+            the model can call zero, one, or several times, deciding for itself when it has enough
+            information before answering (the
+            <span class="term-tooltip" tabindex="0" data-tooltip="Reason + Act: a prompting pattern where the model alternates between reasoning about what to do next and taking an action (like calling a tool), observing the result, and repeating — until it decides it's ready to give a final answer.">ReAct pattern</span>).
+            That trades predictability and cost for flexibility.</p>
+        </details>
 
-      <div class="grid-2">
         <div class="card">
-          <h3>The assembled prompt
-            <span class="info-icon" tabindex="0" data-tooltip="System prompt: instructions given to the LLM before the conversation starts, defining its role and constraints — here, 'only answer from the given context'.">ⓘ</span>
+          <h3>Your question, turned into a vector</h3>
+          <p class="muted small">
+            The embedding has <span id="embedding-dim">1536</span> dimensions — the first 32 are
+            shown here as a color strip by magnitude, just to make "it's a vector" tangible.
+          </p>
+          <div id="embedding-strip" class="embedding-strip"></div>
+        </div>
+
+        <div class="card">
+          <h3>Similarity against every chunk in the index</h3>
+          <p class="muted small">
+            Bar length = cosine similarity with your question. The highlighted ones are the top-K
+            picked to build the context — everything else gets discarded.
+          </p>
+          <div id="score-bars" class="score-bars">
+            <p class="muted">Scores will appear here as soon as they're computed.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Vector map — where your question landed
+            <span class="info-icon" tabindex="0" data-tooltip="Every chunk's real 1536-dimension vector is compressed down to 2 dimensions with PCA (principal component analysis) just so it can be drawn on a flat plane. Distances here are a rough approximation of the real embedding space — useful for intuition, not the literal geometry the model uses.">ⓘ</span>
           </h3>
-          <details id="prompt-details">
-            <summary>View full prompt (context + question)</summary>
-            <pre id="prompt-text" class="code-block"></pre>
-          </details>
+          <p class="muted small">
+            Every dot is a chunk in the index, projected into the same 2D space as your question
+            (the ⭐). The dashed lines connect it to the real top-K chunks — the ones actually used
+            as context — highlighted in blue. Click any dot to make <em>it</em> the reference point
+            and see its real cosine distance to every other chunk (a fresh search, from that
+            chunk's own stored vector — no extra OpenAI call needed); hover any dot for the exact
+            number. Drag to pan, scroll/pinch to zoom.
+          </p>
+          <div class="vector-map-toolbar">
+            <button id="vector-map-reset-view" class="btn-chip" type="button">Reset view</button>
+            <button id="vector-map-reset-ref" class="btn-chip" type="button" hidden>← Back to your question</button>
+            <span id="vector-map-ref-label" class="muted small"></span>
+          </div>
+          <div id="vector-map" class="vector-map">
+            <p class="muted">The map will appear here once a search runs.</p>
+          </div>
         </div>
-        <div class="card">
-          <h3>Assistant's answer</h3>
-          <div id="answer-text" class="answer-box">—</div>
-          <div id="sources-chips" class="chips"></div>
+
+        <div class="grid-2">
+          <div class="card">
+            <h3>The assembled prompt
+              <span class="info-icon" tabindex="0" data-tooltip="System prompt: instructions given to the LLM before the conversation starts, defining its role and constraints — here, 'only answer from the given context'.">ⓘ</span>
+            </h3>
+            <details id="prompt-details">
+              <summary>View full prompt (context + question)</summary>
+              <pre id="prompt-text" class="code-block"></pre>
+            </details>
+          </div>
+          <div class="card">
+            <h3>Assistant's answer</h3>
+            <div id="answer-text" class="answer-box">—</div>
+            <div id="sources-chips" class="chips"></div>
+          </div>
         </div>
+
+        <details class="log-details">
+          <summary>Raw event log</summary>
+          <div id="log-ask" class="event-log"></div>
+        </details>
+      </div>
+
+      <!-- ==================== MODE: AGENTIC RAG ==================== -->
+      <div id="ask-mode-agentic" class="ask-mode-panel" hidden>
+        <p class="hint">
+          Same question, different pipeline: the model has a <code>retrieve_context</code> tool
+          and decides for itself — via native OpenAI tool calling, no LangChain/LangGraph — whether
+          to call it zero, one, or several times (reformulating the query in between) before it has
+          enough context to answer. Bounded at
+          <span id="agentic-max-iterations">4</span> iterations so it always terminates. Each call
+          fetches fewer chunks than Classic mode's top-K, on purpose — it's what actually gives the
+          model a reason to search again.
+        </p>
+        <div class="panel-row">
+          <button id="btn-agentic-example" class="btn-chip" type="button">Try a multi-part question →</button>
+        </div>
+
+        <div id="agentic-trace" class="agentic-trace">
+          <p class="muted">The step-by-step trace will appear here once you ask a question in this mode.</p>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <h3>Assistant's answer</h3>
+            <div id="agentic-answer-text" class="answer-box">—</div>
+            <div id="agentic-sources-chips" class="chips"></div>
+          </div>
+          <div class="card">
+            <h3>Run summary</h3>
+            <div id="agentic-summary" class="muted small">Ask a question in this mode to see how many searches it took.</div>
+          </div>
+        </div>
+
+        <details class="log-details">
+          <summary>Raw event log</summary>
+          <div id="log-agentic" class="event-log"></div>
+        </details>
+      </div>
+
+      <!-- ==================== CLASSIC VS AGENTIC COMPARISON ==================== -->
+      <div id="ask-comparison" class="card ask-comparison" hidden>
+        <h3>Classic vs. Agentic — same question</h3>
+        <p class="muted small">
+          Appears once you've asked the exact same question in both modes.
+        </p>
+        <div id="ask-comparison-content"></div>
       </div>
     </div>
-
-    <details class="log-details">
-      <summary>Raw event log</summary>
-      <div id="log-ask" class="event-log"></div>
-    </details>
   </section>
 
   <!-- ======================= TAB: EXPLORE THE DATA ======================= -->
@@ -479,6 +534,7 @@
           <button class="chip-btn" data-code-key="vector_store_add">Storing vectors</button>
           <button class="chip-btn" data-code-key="vector_store_search">Searching vectors</button>
           <button class="chip-btn" data-code-key="prompt">Building the prompt</button>
+          <button class="chip-btn" data-code-key="agentic_loop">Agentic loop</button>
         </div>
         <div id="code-viewer" class="code-viewer"></div>
       </div>
@@ -593,19 +649,23 @@
               editable (edit a markdown file, rebuild the index) and every answer needs to cite
               its exact source — much harder to guarantee with fine-tuning.</p>
           </div>
-          <div class="concept concept-not-used">
-            <h4>ReAct pattern (Reason + Act) <span class="not-used-badge">not used in this demo</span></h4>
+          <div class="concept">
+            <h4>ReAct pattern (Reason + Act)</h4>
             <p>A prompting pattern where the model alternates between reasoning about what to do
               next, taking an action (like calling a tool), observing the result, and deciding
               whether to act again or answer — repeating until <em>it</em> decides it has enough.
-              See "Is this an AI agent?" in the Ask a Question tab for what changes if you add it.</p>
+              Used in this demo's <a href="#tab-ask" data-tab-link="ask" data-mode="agentic">Agentic
+              RAG mode</a> — ask something there and watch the trace.</p>
           </div>
-          <div class="concept concept-not-used">
-            <h4>Tool calling in agents <span class="not-used-badge">not used in this demo</span></h4>
+          <div class="concept">
+            <h4>Tool calling in agents</h4>
             <p>Giving an LLM a set of callable functions with typed arguments so it can decide
-              during generation which ones to invoke and with what input. An agentic version of
-              this demo would expose <code>retrieve()</code> as a tool the model calls on its own
-              terms, instead of it always running first, unconditionally, as it does here.</p>
+              during generation which ones to invoke and with what input. This demo's
+              <a href="#tab-ask" data-tab-link="ask" data-mode="agentic">Agentic RAG mode</a> exposes
+              <code>retrieve()</code> as exactly this kind of tool — the model calls it on its own
+              terms, zero or more times, instead of it always running first unconditionally like in
+              Classic mode. Real source in <code>src/agentic_rag.py</code>, via the Explore tab's
+              code viewer.</p>
           </div>
         </div>
 

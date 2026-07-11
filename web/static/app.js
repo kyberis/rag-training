@@ -144,7 +144,30 @@ $$("[data-tab-link]").forEach((link) => {
   link.addEventListener("click", (e) => {
     e.preventDefault();
     switchToTab(link.dataset.tabLink);
+    if (link.dataset.mode) setAskMode(link.dataset.mode); // e.g. deep-link straight into Agentic RAG
   });
+});
+
+// ------------------------------------------------------- ask mode toggle --
+//
+// "Classic RAG" / "Agentic RAG" inside the Ask a Question tab — same
+// active/hidden show-and-hide pattern as switchToTab's top-level tabs
+// above, just scoped to the two panels inside #tab-ask instead of the
+// whole page.
+
+let askMode = "classic"; // "classic" | "agentic"
+
+function setAskMode(mode) {
+  askMode = mode;
+  $$(".mode-btn").forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
+  $("#ask-mode-classic").classList.toggle("active", mode === "classic");
+  $("#ask-mode-classic").hidden = mode !== "classic";
+  $("#ask-mode-agentic").classList.toggle("active", mode === "agentic");
+  $("#ask-mode-agentic").hidden = mode !== "agentic";
+}
+
+$$(".mode-btn").forEach((btn) => {
+  btn.addEventListener("click", () => setAskMode(btn.dataset.mode));
 });
 
 // --------------------------------------------------------------- status ---
@@ -921,11 +944,7 @@ function renderVectorMap(container, allScores, topKSources, referencePoint, refe
   container.appendChild(legend);
 }
 
-function askQuestion() {
-  const input = $("#question-input");
-  const question = input.value.trim();
-  if (!question) return;
-
+function askQuestionClassic(question) {
   const btn = $("#btn-ask");
   btn.disabled = true;
   resetAskUI();
@@ -1050,6 +1069,15 @@ function askQuestion() {
       chip.textContent = src;
       chips.appendChild(chip);
     });
+    lastClassicResult = {
+      question,
+      answer: payload.answer,
+      sources: payload.sources,
+      chunks: payload.chunks || [],
+      iterations: 1,
+      elapsed_ms: currentTiming ? currentTiming.total_ms : null,
+    };
+    maybeRenderComparison();
   });
 
   es.addEventListener("answer_error", (e) => {
@@ -1070,6 +1098,288 @@ function askQuestion() {
   });
 
   es.onerror = () => close();
+}
+
+// ------------------------------------------------------------- agentic ----
+//
+// Same question, different pipeline: the model decides via tool calling
+// whether to call retrieve_context zero, one, or several times (see
+// src/agentic_rag.py). Reuses embedding_query_*/search_* events emitted by
+// the same retriever.retrieve() classic mode uses, each tagged with which
+// loop iteration they belong to — so unlike the classic handlers above,
+// these are additive (append to a growing trace) instead of overwrite.
+
+let agenticTraceSteps = {}; // iteration -> DOM elements for that step
+let agenticStepOrder = [];  // iteration numbers in the order their steps were created
+
+function resetAgenticUI() {
+  $("#agentic-trace").innerHTML = '<p class="muted">The step-by-step trace will appear here once you ask a question in this mode.</p>';
+  $("#agentic-answer-text").textContent = "—";
+  $("#agentic-sources-chips").innerHTML = "";
+  $("#agentic-summary").textContent = "Ask a question in this mode to see how many searches it took.";
+  $("#log-agentic").innerHTML = "";
+  agenticTraceSteps = {};
+  agenticStepOrder = [];
+}
+
+function startTraceStep(iteration) {
+  const trace = $("#agentic-trace");
+  if (agenticStepOrder.length === 0) trace.innerHTML = ""; // clear the placeholder on first real step
+
+  // The previous step, if any, gets one more line noting it decided to
+  // search again — the only signal of that decision is a new iteration
+  // starting at all, there's no separate "search again" event.
+  if (agenticStepOrder.length > 0) {
+    const prevEl = agenticTraceSteps[agenticStepOrder[agenticStepOrder.length - 1]];
+    if (prevEl && !prevEl.dataset.resolved) {
+      const decision = document.createElement("div");
+      decision.className = "trace-decision";
+      decision.textContent = "→ decided to search again";
+      prevEl.appendChild(decision);
+      prevEl.dataset.resolved = "1";
+    }
+  }
+
+  const step = document.createElement("div");
+  step.className = "trace-step";
+  const head = document.createElement("div");
+  head.className = "trace-step-head";
+  const badge = document.createElement("span");
+  badge.className = "trace-step-badge";
+  badge.textContent = `Iteration ${iteration}`;
+  head.appendChild(badge);
+  step.appendChild(head);
+  trace.appendChild(step);
+
+  agenticTraceSteps[iteration] = step;
+  agenticStepOrder.push(iteration);
+  return step;
+}
+
+function appendTraceQuery(iteration, query) {
+  const step = agenticTraceSteps[iteration];
+  if (!step) return;
+  const q = document.createElement("div");
+  q.className = "trace-query";
+  q.append("→ searched: ");
+  const queryText = document.createElement("span");
+  queryText.className = "trace-query-text";
+  queryText.textContent = `"${query}"`;
+  q.appendChild(queryText);
+  step.appendChild(q);
+}
+
+function appendTraceChunks(iteration, allScores, topKSources) {
+  const step = agenticTraceSteps[iteration];
+  if (!step) return;
+  // Same "which rows are really the returned set" trick as renderScoreBars:
+  // allScores is sorted by score, the first N whose source is in
+  // topKSources are the chunks retrieve_context actually returned.
+  const remaining = new Map();
+  topKSources.forEach((src) => remaining.set(src, (remaining.get(src) || 0) + 1));
+  const list = document.createElement("ul");
+  list.className = "trace-chunks";
+  allScores.forEach((s) => {
+    const left = remaining.get(s.source) || 0;
+    if (left <= 0) return;
+    remaining.set(s.source, left - 1);
+    const li = document.createElement("li");
+    li.textContent = `${s.source} #${s.chunk_index} (score ${s.score.toFixed(3)})`;
+    list.appendChild(li);
+  });
+  step.appendChild(list);
+}
+
+function resolveTraceStep(iteration, text) {
+  const step = agenticTraceSteps[iteration];
+  if (!step || step.dataset.resolved) return;
+  const decision = document.createElement("div");
+  decision.className = "trace-decision decided";
+  decision.textContent = text;
+  step.appendChild(decision);
+  step.dataset.resolved = "1";
+}
+
+function askQuestionAgentic(question) {
+  const btn = $("#btn-ask");
+  btn.disabled = true;
+  resetAgenticUI();
+
+  const url = `/api/ask/agentic/stream?question=${encodeURIComponent(question)}`;
+  const es = new FetchEventSource(url, { headers: authHeaders() });
+  const close = () => {
+    es.close();
+    btn.disabled = false;
+    checkStatus();
+  };
+
+  es.addEventListener("question_received", (e) => {
+    appendLog("log-agentic", "question_received", JSON.parse(e.data));
+  });
+
+  es.addEventListener("agent_iteration_start", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-agentic", "agent_iteration_start", payload);
+    startTraceStep(payload.iteration);
+  });
+
+  es.addEventListener("agent_tool_call", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-agentic", "agent_tool_call", payload);
+    appendTraceQuery(payload.iteration, payload.query);
+  });
+
+  es.addEventListener("embedding_query_start", (e) => {
+    appendLog("log-agentic", "embedding_query_start", JSON.parse(e.data));
+  });
+  es.addEventListener("embedding_query_done", (e) => {
+    appendLog("log-agentic", "embedding_query_done", JSON.parse(e.data));
+  });
+  es.addEventListener("search_start", (e) => {
+    appendLog("log-agentic", "search_start", JSON.parse(e.data));
+  });
+  es.addEventListener("search_done", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-agentic", "search_done", payload);
+    appendTraceChunks(payload.iteration, payload.all_scores, payload.top_k_sources);
+  });
+
+  es.addEventListener("agent_no_tool_call", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-agentic", "agent_no_tool_call", payload);
+    resolveTraceStep(payload.iteration, "→ decided it has enough context — answering now");
+  });
+
+  es.addEventListener("agent_answer", (e) => {
+    appendLog("log-agentic", "agent_answer", JSON.parse(e.data));
+  });
+
+  es.addEventListener("agent_done", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-agentic", "agent_done", payload);
+    $("#agentic-answer-text").textContent = payload.answer;
+    const chips = $("#agentic-sources-chips");
+    chips.innerHTML = "";
+    payload.sources.forEach((src) => {
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.textContent = src;
+      chips.appendChild(chip);
+    });
+    $("#agentic-summary").innerHTML = "";
+    const summary = $("#agentic-summary");
+    [
+      ["Iterations", payload.iterations],
+      ["Chunks retrieved (total)", payload.chunks.length],
+      ["Elapsed", `${payload.elapsed_ms}ms`],
+      ["Sources cited", payload.sources.length],
+    ].forEach(([label, value], i) => {
+      if (i > 0) summary.append(" · ");
+      summary.append(`${label}: `);
+      const strong = document.createElement("strong");
+      strong.textContent = value;
+      summary.appendChild(strong);
+    });
+    lastAgenticResult = {
+      question,
+      answer: payload.answer,
+      sources: payload.sources,
+      chunks: payload.chunks,
+      iterations: payload.iterations,
+      elapsed_ms: payload.elapsed_ms,
+    };
+    maybeRenderComparison();
+  });
+
+  es.addEventListener("agent_error", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-agentic", "agent_error", payload, true);
+    $("#agentic-answer-text").textContent = `Error: ${payload.message}`;
+  });
+
+  es.addEventListener("pipeline_done", (e) => {
+    appendLog("log-agentic", "pipeline_done", JSON.parse(e.data));
+    close();
+  });
+
+  es.addEventListener("pipeline_error", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-agentic", "pipeline_error", payload, true);
+    $("#agentic-answer-text").textContent = `Error: ${payload.message}`;
+    close();
+  });
+
+  es.onerror = () => close();
+}
+
+// --------------------------------------------------- classic vs agentic ---
+
+let lastClassicResult = null; // { question, answer, sources, chunks, iterations, elapsed_ms }
+let lastAgenticResult = null;
+
+function maybeRenderComparison() {
+  if (!lastClassicResult || !lastAgenticResult) return;
+  if (lastClassicResult.question !== lastAgenticResult.question) return;
+  renderComparisonCard(lastClassicResult, lastAgenticResult);
+}
+
+function renderComparisonCard(classicResult, agenticResult) {
+  const card = $("#ask-comparison");
+  const content = $("#ask-comparison-content");
+  content.innerHTML = "";
+
+  const grid = document.createElement("div");
+  grid.className = "ask-comparison-grid";
+
+  [["Classic", classicResult], ["Agentic", agenticResult]].forEach(([label, r]) => {
+    const col = document.createElement("div");
+    col.className = "ask-comparison-col";
+    const h4 = document.createElement("h4");
+    h4.textContent = label;
+    col.appendChild(h4);
+
+    const stats = [
+      ["Searches", r.iterations],
+      ["Chunks retrieved", r.chunks.length],
+      ["Sources cited", r.sources.length],
+      ["Answer length", `${r.answer.split(/\s+/).length} words`],
+      ["Elapsed", r.elapsed_ms != null ? `${r.elapsed_ms}ms` : "—"],
+    ];
+    stats.forEach(([statLabel, value]) => {
+      const row = document.createElement("div");
+      row.className = "ask-comparison-stat";
+      const span = document.createElement("span");
+      span.textContent = statLabel;
+      const strong = document.createElement("strong");
+      strong.textContent = value;
+      row.appendChild(span);
+      row.appendChild(strong);
+      col.appendChild(row);
+    });
+    grid.appendChild(col);
+  });
+
+  content.appendChild(grid);
+  card.hidden = false;
+}
+
+// --------------------------------------------------- example question -----
+
+const AGENTIC_EXAMPLE_QUESTION = "¿Cómo cancelo un turno y puedo pedir reembolso?";
+
+$("#btn-agentic-example").addEventListener("click", () => {
+  const input = $("#question-input");
+  input.value = AGENTIC_EXAMPLE_QUESTION;
+  input.focus();
+});
+
+// --------------------------------------------------------- dispatcher -----
+
+function askQuestion() {
+  const question = $("#question-input").value.trim();
+  if (!question) return;
+  if (askMode === "agentic") askQuestionAgentic(question);
+  else askQuestionClassic(question);
 }
 
 $("#btn-ask").addEventListener("click", askQuestion);
