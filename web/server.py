@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Callable
 
 import numpy as np
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -66,6 +66,25 @@ def _immediate_error(message: str) -> StreamingResponse:
         iter([sse_event("pipeline_error", {"message": message})]),
         media_type="text/event-stream",
     )
+
+
+NO_KEY_MESSAGE = (
+    "No hay ninguna OpenAI API key disponible. Si corrés esto localmente, "
+    "copiá .env.example a .env y completá tu clave (ver README.md). Si es la "
+    "demo pública, pegá tu propia clave en el campo de arriba — se usa solo "
+    "para este pedido y nunca se guarda en el servidor."
+)
+
+
+def _resolve_api_key(x_openai_key: str | None) -> str | None:
+    """BYOK key from the browser, if the visitor supplied one — never logged,
+    never stored, only forwarded to the OpenAI SDK call it's needed for.
+    Falls back to the server's own key (config.OPENAI_API_KEY) when set,
+    which is what keeps local dev / self-hosting frictionless: no key field
+    shows up in the UI at all when the server already has one (see
+    /api/status's has_api_key).
+    """
+    return x_openai_key or config.OPENAI_API_KEY
 
 
 def run_pipeline_as_sse(target_fn: Callable[[Callable[[str, dict], None]], dict]) -> StreamingResponse:
@@ -264,43 +283,54 @@ def eval_golden():
     return load_golden_dataset()
 
 
+@app.get("/api/eval/snapshot")
+def eval_snapshot():
+    """Resultados reales de Recall@K + Faithfulness, calculados una vez por
+    el mantenedor del proyecto y committeados al repo — así cualquiera que
+    abra la demo pública ve números reales (no inventados) sin gastar un
+    solo llamado a OpenAI. 'Run evaluation' abajo repite lo mismo en vivo,
+    para quien traiga su propia API key.
+    """
+    if not config.RESULTS_SNAPSHOT_PATH.exists():
+        raise HTTPException(status_code=404, detail="Todavía no se generó el snapshot de evaluación.")
+    with open(config.RESULTS_SNAPSHOT_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
 @app.get("/api/eval/stream")
-def eval_stream():
+def eval_stream(x_openai_key: str | None = Header(default=None, alias="X-OpenAI-Key")):
     """Corre Recall@K + Faithfulness (LLM-as-judge) contra el golden dataset.
 
     ~30 llamadas reales a la API de OpenAI (10 embeddings de pregunta + 10
     respuestas + 10 juicios), toma cerca de un minuto — el frontend avisa
-    el costo/tiempo antes de este botón.
+    el costo/tiempo antes de este botón. Los resultados ya calculados están
+    en /api/eval/snapshot si no querés gastar tu propia clave.
     """
     if not config.INDEX_VECTORS_PATH.exists():
         return _immediate_error(
             "No hay índice construido todavía. Andá a la pestaña 'Build the Index' y construilo primero."
         )
-    if not config.OPENAI_API_KEY:
-        return _immediate_error(
-            "Falta OPENAI_API_KEY. Copiá .env.example a .env y completá tu clave "
-            "(ver README.md, sección 'Cómo correrlo')."
-        )
+    api_key = _resolve_api_key(x_openai_key)
+    if not api_key:
+        return _immediate_error(NO_KEY_MESSAGE)
 
     def target(on_event):
         golden = load_golden_dataset()
-        recall = evaluate_recall_at_k(golden, on_event=on_event)
-        faithfulness = evaluate_faithfulness(golden, on_event=on_event)
+        recall = evaluate_recall_at_k(golden, on_event=on_event, api_key=api_key)
+        faithfulness = evaluate_faithfulness(golden, on_event=on_event, api_key=api_key)
         return {"recall": recall, "faithfulness": faithfulness}
 
     return run_pipeline_as_sse(target)
 
 
 @app.get("/api/ingest/stream")
-def ingest_stream():
-    if not config.OPENAI_API_KEY:
-        return _immediate_error(
-            "Falta OPENAI_API_KEY. Copiá .env.example a .env y completá tu clave "
-            "(ver README.md, sección 'Cómo correrlo')."
-        )
+def ingest_stream(x_openai_key: str | None = Header(default=None, alias="X-OpenAI-Key")):
+    api_key = _resolve_api_key(x_openai_key)
+    if not api_key:
+        return _immediate_error(NO_KEY_MESSAGE)
 
     def target(on_event):
-        store = build_index(on_event=on_event)
+        store = build_index(on_event=on_event, api_key=api_key)
         # El server vive como proceso largo: si no invalidamos el store
         # cacheado, las próximas preguntas seguirían usando el índice viejo.
         reset_store()
@@ -310,19 +340,21 @@ def ingest_stream():
 
 
 @app.get("/api/ask/stream")
-def ask_stream(question: str, top_k: int | None = None):
+def ask_stream(
+    question: str,
+    top_k: int | None = None,
+    x_openai_key: str | None = Header(default=None, alias="X-OpenAI-Key"),
+):
     if not config.INDEX_VECTORS_PATH.exists():
         return _immediate_error(
             "No hay índice construido todavía. Andá a la pestaña 'Inicialización' y construilo primero."
         )
-    if not config.OPENAI_API_KEY:
-        return _immediate_error(
-            "Falta OPENAI_API_KEY. Copiá .env.example a .env y completá tu clave "
-            "(ver README.md, sección 'Cómo correrlo')."
-        )
+    api_key = _resolve_api_key(x_openai_key)
+    if not api_key:
+        return _immediate_error(NO_KEY_MESSAGE)
 
     def target(on_event):
-        return answer(question, top_k=top_k, on_event=on_event)
+        return answer(question, top_k=top_k, on_event=on_event, api_key=api_key)
 
     return run_pipeline_as_sse(target)
 

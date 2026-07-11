@@ -48,11 +48,16 @@ def load_golden_dataset() -> list[dict]:
         return json.load(f)
 
 
-def evaluate_recall_at_k(golden: list[dict], top_k: int | None = None, on_event: EventCallback | None = None) -> float:
+def evaluate_recall_at_k(
+    golden: list[dict],
+    top_k: int | None = None,
+    on_event: EventCallback | None = None,
+    api_key: str | None = None,
+) -> float:
     top_k = top_k or config.TOP_K
     hits = 0
     for item in golden:
-        retrieved = retrieve(item["question"], top_k=top_k)
+        retrieved = retrieve(item["question"], top_k=top_k, api_key=api_key)
         retrieved_sources = {c["source"] for c in retrieved}
         expected = set(item["expected_sources"])
         hit = bool(expected & retrieved_sources)
@@ -74,11 +79,15 @@ def evaluate_recall_at_k(golden: list[dict], top_k: int | None = None, on_event:
     return recall
 
 
-def evaluate_faithfulness(golden: list[dict], on_event: EventCallback | None = None) -> float:
-    client = OpenAI(api_key=config.OPENAI_API_KEY)
+def evaluate_faithfulness(
+    golden: list[dict],
+    on_event: EventCallback | None = None,
+    api_key: str | None = None,
+) -> float:
+    client = OpenAI(api_key=api_key or config.OPENAI_API_KEY)
     faithful_count = 0
     for item in golden:
-        result = answer(item["question"])
+        result = answer(item["question"], api_key=api_key)
         context = "\n\n".join(c["text"] for c in result["chunks"])
         judge_prompt = JUDGE_PROMPT.format(context=context, answer=result["answer"])
         judge_response = client.chat.completions.create(

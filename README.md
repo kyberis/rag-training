@@ -1,5 +1,7 @@
 # RAG de práctica — DocPlanner Support Assistant
 
+**Demo pública, sin instalar nada: [rag-training.vercel.app](https://rag-training.vercel.app)** — documentos, chunks, índice, código fuente y la última evaluación real son navegables gratis; para hacer una pregunta nueva en vivo o reconstruir el índice necesitás pegar tu propia OpenAI API key (ver sección 2.9, "por qué" y cómo funciona).
+
 Este proyecto es un RAG (Retrieval Augmented Generation) real y ejecutable, construido como ejercicio de preparación técnica. El caso de uso es hipotético: un asistente de soporte que responde preguntas de pacientes en base a una base de conocimiento sintética inspirada en el modelo de negocio público de DocPlanner (marketplace que conecta pacientes con médicos, opera como ZnanyLekarz en Polonia y Doctoralia en España/Latam, entre otras marcas).
 
 **Importante:** los documentos en `data/docplanner_kb/` son contenido sintético que yo (el asistente) generé para este ejercicio. No son documentación interna real de DocPlanner — están inspirados en cómo funciona públicamente ese tipo de plataforma (reservas, cancelaciones, teleconsulta, pagos, reseñas, privacidad, panel de administración de clínicas).
@@ -151,15 +153,39 @@ python -m web.server
 uvicorn web.server:app --reload
 ```
 
-Después abrí [http://127.0.0.1:8000](http://127.0.0.1:8000) en el navegador. Requiere el mismo `.env` con `OPENAI_API_KEY` que el CLI (ver 2.3). **La interfaz de la UI web está en inglés** (pensada para compartirse), aunque la base de conocimiento y las respuestas del asistente siguen en español — la UI lo aclara en un banner. La UI tiene tres pestañas:
+Después abrí [http://127.0.0.1:8000](http://127.0.0.1:8000) en el navegador. Requiere el mismo `.env` con `OPENAI_API_KEY` que el CLI (ver 2.3). **La interfaz de la UI web está en inglés** (pensada para compartirse), aunque la base de conocimiento y las respuestas del asistente siguen en español — la UI lo aclara en un banner. La UI tiene cuatro pestañas:
 
 - **Build the Index**: botón para (re)construir el índice, con un diagrama animado (Documents → Chunking → Embeddings → Index saved) que se va iluminando en vivo, mostrando cuántos chunks salió de cada documento y el progreso de cada batch de embeddings.
-- **Ask a Question**: hacé una pregunta y mirá en vivo el diagrama (Question → Embedding → Search → Top-K → Prompt → LLM → Answer), el embedding de tu pregunta como una tira de color, la similitud coseno de **todos** los chunks contra tu pregunta (con los top-K resaltados, para ver por qué ganaron sobre el resto), el prompt final armado con el contexto citado, y la respuesta apareciendo en streaming real token por token.
+- **Ask a Question**: hacé una pregunta y mirá en vivo el diagrama (Question → Embedding → Search → Top-K → Prompt → LLM → Answer), el embedding de tu pregunta como una tira de color, la similitud coseno de **todos** los chunks contra tu pregunta (con los top-K resaltados, para ver por qué ganaron sobre el resto), un mapa 2D (PCA) de dónde cae tu pregunta respecto a cada chunk, el prompt final armado con el contexto citado, y la respuesta apareciendo en streaming real token por token. Una nota expandible aclara que esto es RAG clásico de un solo paso — sin LangChain ni LangGraph, sin loop de decisión — para no leerse como agéntico sin serlo.
 - **Explore the Data**: navegá los 9 documentos, mirá exactamente en qué rango de palabras se cortó cada chunk (con el overlap resaltado), y — una vez construido el índice — inspeccioná el vector real guardado para cualquier chunk (dimensión, norma, y los 1536 números crudos). Un visor de código muestra el **código fuente real** de `chunking`, `embeddings`, `vector_store` y `_build_prompt`, obtenido en vivo con `inspect.getsource()` — nunca una copia que se pueda desincronizar del código que corrió de verdad.
+- **Metrics & Concepts**: Recall@K y Faithfulness (LLM-as-a-judge) corridos contra el golden dataset de 10 preguntas — el snapshot committeado por default, o en vivo si tenés una key. Hallucination rate se muestra como lo que es, `1 − faithfulness`, nunca una medición separada. Latencia real (P50/P95/P99, con el mínimo de muestras honestamente exigido antes de mostrar percentiles) de las preguntas que hiciste en la sesión. Y un glosario filtrado de conceptos de RAG/AI-engineering, incluyendo cuáles quedaron deliberadamente afuera y por qué (DORA metrics, CodeScene, EU AI Act — ninguno aplica a una demo local de un solo autor).
 
-Internamente, `src/ingest.py`, `src/retriever.py` y `src/rag.py` aceptan un parámetro opcional `on_event` (default `None`) que emite eventos de progreso; el CLI y `eval/evaluate.py` no lo usan y siguen funcionando exactamente igual que antes. `src/chunking.py` expone además `chunk_spans()` (rangos de palabras por chunk, usado para el visor de "Explore"). El server (`web/server.py`) es la única parte del proyecto que sabe de FastAPI: traduce esos eventos a Server-Sent Events (SSE) para el frontend estático (`web/static/`, HTML/CSS/JS plano, sin build step), y expone además endpoints de solo lectura para navegar documentos/chunks/vectores/código, todos con whitelist (nunca se arma un path ni se evalúa un símbolo a partir de input del cliente).
+Internamente, `src/ingest.py`, `src/retriever.py`, `src/rag.py` y `eval/evaluate.py` aceptan dos parámetros opcionales: `on_event` (default `None`, emite eventos de progreso) y `api_key` (default `None`, usa `config.OPENAI_API_KEY`) — el CLI no pasa ninguno de los dos y sigue funcionando exactamente igual que antes. `src/chunking.py` expone además `chunk_spans()` (rangos de palabras por chunk, usado para el visor de "Explore"). `eval/generate_snapshot.py` corre una evaluación real y la guarda en `eval/results_snapshot.json` (committeado) — correlo de nuevo (`python -m eval.generate_snapshot`) si cambiás los documentos o el golden dataset. El server (`web/server.py`) es la única parte del proyecto que sabe de FastAPI: traduce esos eventos a Server-Sent Events (SSE) para el frontend estático (`web/static/`, HTML/CSS/JS plano, sin build step), y expone además endpoints de solo lectura para navegar documentos/chunks/vectores/código, todos con whitelist (nunca se arma un path ni se evalúa un símbolo a partir de input del cliente).
 
-**Nota de seguridad si pensás hostear esto públicamente en internet** (más allá de compartir el repo para que cada quien lo corra local): tal como está, cualquiera que llegue a la URL puede disparar `/api/ingest/stream` y `/api/ask/stream`, que hacen llamadas reales — y pagas — a la API de OpenAI. Antes de exponerlo en un servidor público hace falta agregar rate-limiting, un tope de costo, o autenticación.
+### 2.9 Demo pública en Vercel — quién paga las llamadas a OpenAI
+
+La demo en [rag-training.vercel.app](https://rag-training.vercel.app) **no tiene ninguna OpenAI API key propia configurada en el servidor** — a propósito. Si la tuviera, cualquiera que encuentre la URL podría gastar tu plata sin límite con solo hacer preguntas. En cambio:
+
+- **Gratis para cualquiera, sin key:** las pestañas "Build the Index" (solo mirar, no reconstruir), "Explore the Data" (documentos, chunks, vectores, código fuente real) y "Metrics & Concepts" muestran datos reales — el índice y los resultados de evaluación (`eval/results_snapshot.json`) fueron committeados al repo tras una corrida real mía, no son ilustrativos.
+- **Requiere tu propia key:** hacer una pregunta nueva, reconstruir el índice, o correr la evaluación en vivo llaman a la API de OpenAI de verdad, así que piden que pegues tu propia clave en el campo de arriba de la página. Se guarda solo en `sessionStorage` de esa pestaña del navegador (desaparece al cerrarla), viaja únicamente como un header (`X-OpenAI-Key`) en el pedido que la necesita — nunca en la URL, nunca logueada ni guardada en el servidor. El código relevante: `_resolve_api_key()` en `web/server.py`, y `FetchEventSource` / `authHeaders()` en `web/static/app.js` (existe porque el `EventSource` nativo no puede mandar headers custom).
+- Localmente (`python -m web.server` con tu `.env`), nada de esto aplica: el campo de key ni siquiera aparece, porque el servidor ya tiene la tuya — el mismo `answer()`, `retrieve()`, `build_index()`, etc. simplemente reciben `api_key=None` y usan `config.OPENAI_API_KEY` como siempre.
+
+**⚠️ Si forkeás esto:** no le agregues una `OPENAI_API_KEY` como variable de entorno en el proyecto de Vercel del deploy público. `_resolve_api_key()` en `web/server.py` cae a `config.OPENAI_API_KEY` cuando no llega un header `X-OpenAI-Key` — eso es justo lo que mantiene la demo funcionando sin fricción en local, pero en un deploy público con una key de servidor configurada, convierte el sitio en un proxy gratuito e ilimitado de OpenAI pagado por vos. Sin esa variable seteada (como está hoy), ese fallback nunca se activa ahí.
+
+**Cómo se deployó** (por si querés reproducirlo o forkearlo):
+
+```bash
+npm i -g vercel   # si no la tenés
+vercel link       # una vez, por proyecto
+vercel deploy --prod
+```
+
+- `pyproject.toml` le dice a Vercel dónde está la app (`web.server:app`) y define el build step.
+- `build_static.py` copia `web/static/` a `public/` en cada deploy — Vercel sirve `public/**` directo desde su CDN, sin pasar por la función Python, así que `web/static/` sigue siendo la única fuente de verdad.
+- `vercel.json` sube el timeout de la función a 60s (la evaluación completa hace ~30 llamadas reales y puede acercarse al límite).
+- `index/vectors.npy` + `index/meta.json` están committeados (ver `.gitignore`) para que las pestañas de solo lectura funcionen sin depender de una ingestión previa en cada instancia.
+- **`.vercelignore` es crítico:** a diferencia de lo que yo asumía, el CLI de Vercel *no* excluye automáticamente los archivos listados en `.gitignore` — así que sin un `.vercelignore` explícito, `.env` (con tu key real) terminaría subido al bundle de la función. Si forkeás esto, no lo borres.
+- **Statelessness real:** cada request puede caer en una instancia serverless distinta, sin disco compartido. Si reconstruís el índice desde la demo pública, tu próxima pregunta podría no verlo — no es un bug, la pestaña "Build the Index" lo explica.
 
 ---
 

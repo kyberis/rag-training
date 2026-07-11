@@ -35,11 +35,16 @@ def _build_prompt(question: str, chunks: list[dict]) -> str:
     return f"CONTEXTO:\n{context}\n\nPREGUNTA DEL USUARIO:\n{question}"
 
 
-def answer(question: str, top_k: int | None = None, on_event: EventCallback | None = None) -> dict:
+def answer(
+    question: str,
+    top_k: int | None = None,
+    on_event: EventCallback | None = None,
+    api_key: str | None = None,
+) -> dict:
     emit(on_event, "question_received", question=question, top_k=top_k or config.TOP_K)
 
     try:
-        chunks = retrieve(question, top_k=top_k, on_event=on_event)
+        chunks = retrieve(question, top_k=top_k, on_event=on_event, api_key=api_key)
 
         if not chunks:
             emit(on_event, "no_context")
@@ -49,7 +54,7 @@ def answer(question: str, top_k: int | None = None, on_event: EventCallback | No
                 "chunks": [],
             }
 
-        client = OpenAI(api_key=config.OPENAI_API_KEY)
+        client = OpenAI(api_key=api_key or config.OPENAI_API_KEY)
         prompt = _build_prompt(question, chunks)
         sources = sorted({c["source"] for c in chunks})
         emit(on_event, "prompt_built", system_prompt=SYSTEM_PROMPT, prompt=prompt, sources=sources)

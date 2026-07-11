@@ -96,13 +96,18 @@ def _annotate_with_projection(results: list[dict], xy_by_key: dict) -> list[dict
     ]
 
 
-def retrieve(query: str, top_k: int | None = None, on_event: EventCallback | None = None) -> list[dict]:
+def retrieve(
+    query: str,
+    top_k: int | None = None,
+    on_event: EventCallback | None = None,
+    api_key: str | None = None,
+) -> list[dict]:
     top_k = top_k or config.TOP_K
     store = _get_store()
 
     emit(on_event, "embedding_query_start", query=query)
     t0 = time.time()
-    query_vector = embed_query(query)
+    query_vector = embed_query(query, api_key=api_key)
     emit(
         on_event,
         "embedding_query_done",

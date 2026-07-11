@@ -54,6 +54,31 @@ body {
 .status-ok { color: var(--ok); border-color: var(--ok); background: rgba(74, 222, 128, 0.08); }
 .status-warn { color: var(--warn); border-color: var(--warn); background: rgba(251, 191, 36, 0.08); }
 
+.byok-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.75rem 1.5rem 0;
+  padding: 0.6rem 0.9rem;
+  border: 1px solid var(--warn);
+  border-radius: var(--radius);
+  background: rgba(251, 191, 36, 0.08);
+  flex-wrap: wrap;
+}
+.byok-banner label { font-size: 0.82rem; color: var(--text); font-weight: 600; white-space: nowrap; }
+.byok-banner input {
+  flex: 1 1 220px;
+  min-width: 180px;
+  padding: 0.35rem 0.6rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.82rem;
+}
+.byok-banner #byok-status { font-size: 0.78rem; }
+
 .lang-note {
   margin: 0.75rem 1.5rem 0;
   padding: 0.6rem 0.9rem;
@@ -179,6 +204,12 @@ main { padding: 0 1.5rem 3rem; max-width: 1100px; margin: 0 auto; }
   border-color: var(--ok);
 }
 .pbox.done .pbox-label { color: var(--text); }
+
+.pbox.error {
+  border-color: var(--error);
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.15);
+}
+.pbox.error .pbox-label { color: var(--error); }
 
 /* Persistent "this is the box whose output you're viewing" marker —
    independent of the active/done run-state coloring above. */

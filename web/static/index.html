@@ -16,6 +16,15 @@
   <div id="status-banner" class="status-banner status-unknown">Checking status…</div>
 </header>
 
+<div id="byok-banner" class="byok-banner" hidden>
+  <label for="byok-key-input">Your OpenAI API key</label>
+  <input id="byok-key-input" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false" />
+  <button id="byok-save" class="btn-chip" type="button">Use this key</button>
+  <button id="byok-clear" class="btn-chip" type="button" hidden>Clear</button>
+  <span id="byok-status" class="muted small"></span>
+  <span class="info-icon" tabindex="0" data-tooltip="This public demo has no OpenAI key of its own — everything you can see for free (documents, chunks, the pre-built index, the code viewer, the last real evaluation run) was computed once and committed to the repo. Asking a brand-new question, rebuilding the index, or re-running the evaluation live calls the OpenAI API for real, so those need a key. It's kept only in this browser tab's sessionStorage, sent as a request header only on the request that needs it, and never logged or stored on the server. Get one at platform.openai.com/api-keys — using it here costs you fractions of a cent per question.">ⓘ</span>
+</div>
+
 <p class="lang-note">
   This is an educational demo (source on
   <a href="https://github.com/kyberis/rag-training" target="_blank" rel="noopener">GitHub</a>).
@@ -43,11 +52,28 @@
       whenever the documents change.
     </p>
 
+    <details class="agent-note">
+      <summary>Why might a rebuilt index disappear on the public demo?
+      <p>If you're running this on your own machine, the server is a single long-lived process —
+        click "Build index" and every question you ask afterward uses the fresh index immediately.</p>
+      <p>The public deployment on Vercel is different: it runs as
+        <span class="term-tooltip" tabindex="0" data-tooltip="A function that only exists for the duration of one request (or a short-lived warm window afterward), instead of running continuously. Vercel may route your next request to a different instance with a completely separate filesystem — nothing you wrote to disk on the first one is guaranteed to be there.">serverless functions</span>
+        with no shared disk between instances. Rebuilding there writes to that one instance's
+        temporary storage — a great way to watch the real ingestion pipeline run, but your very
+        next question might land on a different instance and not see it. That's not a bug, it's
+        what "serverless" means; it's exactly why this demo also ships a pre-built index and a
+        <a href="#tab-metrics" data-tab-link="metrics">pre-computed evaluation snapshot</a> that
+        work regardless of which instance answers you.</p>
+    </details>
+
     <div class="panel">
       <div class="panel-row">
         <button id="btn-ingest" class="btn btn-primary">Build index</button>
         <span id="ingest-progress" class="progress-text"></span>
       </div>
+      <p id="ingest-disabled-hint" class="muted small" hidden>
+        Paste your OpenAI API key above first.
+      </p>
 
       <p class="muted small click-hint">Click any box below to see exactly what it produced.</p>
       <div class="pipeline" id="pipeline-init">
@@ -334,18 +360,21 @@
           <span class="info-icon" tabindex="0" data-tooltip="Runs eval/evaluate.py's Recall@K and Faithfulness (LLM-as-judge) against the 10-question golden dataset — the same code the CLI uses (python -m eval.evaluate), just streamed live to this page.">ⓘ</span>
         </h3>
         <p class="muted small">
-          Runs the 10-question golden dataset against this index: ~30 real OpenAI API calls
-          (10 question embeddings + 10 answers + 10 judge calls), takes roughly a minute.
+          The tiles below show a real run of the 10-question golden dataset against this exact
+          index — either the snapshot committed to the repo, or a fresh live run if you click the
+          button (~30 real OpenAI API calls: 10 question embeddings + 10 answers + 10 judge
+          calls, takes roughly a minute, needs your own key on the public demo).
         </p>
+        <p id="eval-source-label" class="muted small"></p>
         <div class="panel-row">
-          <button id="btn-eval" class="btn btn-primary">Run evaluation</button>
+          <button id="btn-eval" class="btn btn-primary">Run evaluation live</button>
           <span id="eval-progress" class="progress-text"></span>
         </div>
         <p id="eval-disabled-hint" class="muted small" hidden>
           Build the index first, in the "Build the Index" tab.
         </p>
 
-        <div class="grid-2" id="eval-scores" hidden>
+        <div class="grid-2" id="eval-scores">
           <div class="metric-tile">
             <div class="metric-value" id="metric-recall">—</div>
             <div class="metric-label">Recall@K

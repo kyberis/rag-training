@@ -30,7 +30,7 @@ def load_documents() -> list[dict]:
     return docs
 
 
-def build_index(on_event: EventCallback | None = None) -> SimpleVectorStore:
+def build_index(on_event: EventCallback | None = None, api_key: str | None = None) -> SimpleVectorStore:
     start = time.time()
     emit(on_event, "ingest_start")
     try:
@@ -78,7 +78,7 @@ def build_index(on_event: EventCallback | None = None) -> SimpleVectorStore:
                 total_batches=total_batches,
             )
             t0 = time.time()
-            vectors = embed_texts(batch_texts)
+            vectors = embed_texts(batch_texts, api_key=api_key)
             store.add(vectors, batch_meta)
             emit(
                 on_event,

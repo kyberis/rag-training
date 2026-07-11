@@ -3,29 +3,123 @@
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 
+// ------------------------------------------------------------- BYOK key ---
+//
+// The public demo has no server-side OpenAI key (see README): only read-only
+// endpoints work for free. Live actions (ask, build index, run evaluation)
+// need a key. `EventSource` can't send custom headers, and a key in the URL
+// query string would end up in server/CDN access logs — so BYOK is only sent
+// as a request header on a fetch(), never in a URL. Session-only storage: it
+// disappears when the tab closes, never touches localStorage or a cookie.
+const BYOK_STORAGE_KEY = "rag_demo_openai_key";
+
+function getByokKey() {
+  return sessionStorage.getItem(BYOK_STORAGE_KEY) || "";
+}
+
+function setByokKey(key) {
+  if (key) sessionStorage.setItem(BYOK_STORAGE_KEY, key);
+  else sessionStorage.removeItem(BYOK_STORAGE_KEY);
+}
+
+function authHeaders() {
+  const key = getByokKey();
+  return key ? { "X-OpenAI-Key": key } : {};
+}
+
+// ------------------------------------------------------- fetch-based SSE ---
+//
+// Drop-in replacement for `new EventSource(url)` with the same interface
+// (`addEventListener(name, handler)`, `.onerror`, `.close()`) the rest of
+// this file already uses — the only reason it exists is that native
+// EventSource has no way to attach the X-OpenAI-Key header above, since it
+// only ever issues plain GET requests with no custom headers.
+class FetchEventSource extends EventTarget {
+  constructor(url, { headers = {} } = {}) {
+    super();
+    this._closed = false;
+    this.onerror = null;
+    this._run(url, headers);
+  }
+
+  async _run(url, headers) {
+    let response;
+    try {
+      response = await fetch(url, { headers });
+    } catch (err) {
+      if (!this._closed && this.onerror) this.onerror(err);
+      return;
+    }
+    if (!response.ok || !response.body) {
+      if (!this._closed && this.onerror) this.onerror(new Error(`HTTP ${response.status}`));
+      return;
+    }
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    try {
+      while (!this._closed) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buffer.indexOf("\n\n")) !== -1) {
+          const raw = buffer.slice(0, idx);
+          buffer = buffer.slice(idx + 2);
+          if (this._closed) break;
+          let name = "message";
+          let data = "";
+          for (const line of raw.split("\n")) {
+            if (line.startsWith("event:")) name = line.slice(6).trim();
+            else if (line.startsWith("data:")) data += line.slice(5).trim();
+          }
+          if (data) this.dispatchEvent(new MessageEvent(name, { data }));
+        }
+      }
+    } catch (err) {
+      if (!this._closed && this.onerror) this.onerror(err);
+    }
+  }
+
+  close() {
+    this._closed = true;
+  }
+}
+
 // ---------------------------------------------------------------- tabs ----
 
 let exploreCodeInitialized = false;
 
-$$(".tab-btn").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    $$(".tab-btn").forEach((b) => b.classList.remove("active"));
-    $$(".tab-panel").forEach((p) => p.classList.remove("active"));
-    btn.classList.add("active");
-    $(`#tab-${btn.dataset.tab}`).classList.add("active");
-    if (btn.dataset.tab === "explore") {
-      // Refresh every time (not just the first visit): if the index got
-      // rebuilt in the other tab in the meantime, a stale "not built yet"
-      // or stale chunk list would be actively misleading here.
-      renderDbSummary($("#db-summary"));
-      loadDocPicker();
-      $("#explore-doc-detail").hidden = true;
-      $("#explore-chunks-card").hidden = true;
-      if (!exploreCodeInitialized) {
-        exploreCodeInitialized = true;
-        loadCodeSnippet("chunking"); // code never changes at runtime — fetch once, cache
-      }
+function switchToTab(tabName) {
+  const btn = $(`.tab-btn[data-tab="${tabName}"]`);
+  if (!btn) return;
+  $$(".tab-btn").forEach((b) => b.classList.remove("active"));
+  $$(".tab-panel").forEach((p) => p.classList.remove("active"));
+  btn.classList.add("active");
+  $(`#tab-${tabName}`).classList.add("active");
+  if (tabName === "explore") {
+    // Refresh every time (not just the first visit): if the index got
+    // rebuilt in the other tab in the meantime, a stale "not built yet"
+    // or stale chunk list would be actively misleading here.
+    renderDbSummary($("#db-summary"));
+    loadDocPicker();
+    $("#explore-doc-detail").hidden = true;
+    $("#explore-chunks-card").hidden = true;
+    if (!exploreCodeInitialized) {
+      exploreCodeInitialized = true;
+      loadCodeSnippet("chunking"); // code never changes at runtime — fetch once, cache
     }
+  }
+}
+
+$$(".tab-btn").forEach((btn) => {
+  btn.addEventListener("click", () => switchToTab(btn.dataset.tab));
+});
+
+$$("[data-tab-link]").forEach((link) => {
+  link.addEventListener("click", (e) => {
+    e.preventDefault();
+    switchToTab(link.dataset.tabLink);
   });
 });
 
@@ -46,11 +140,12 @@ async function checkStatus() {
 
 function updateStatusBanner(data) {
   const banner = $("#status-banner");
-  if (!data.has_api_key) {
-    banner.textContent = "Missing OPENAI_API_KEY in .env";
-    banner.className = "status-banner status-warn";
-  } else if (!data.index_exists) {
+  const usable = data.has_api_key || !!getByokKey();
+  if (!data.index_exists) {
     banner.textContent = "Index not built yet";
+    banner.className = "status-banner status-warn";
+  } else if (!usable) {
+    banner.textContent = "Index ready — paste an OpenAI key above to ask live questions";
     banner.className = "status-banner status-warn";
   } else {
     banner.textContent = `Index ready: ${data.n_vectors} vectors · ${data.dim} dimensions`;
@@ -58,22 +153,62 @@ function updateStatusBanner(data) {
   }
 }
 
+function updateByokBanner(data) {
+  const keylessDeployment = !data.has_api_key;
+  $("#byok-banner").hidden = !keylessDeployment;
+  const hasKey = !!getByokKey();
+  $("#byok-clear").hidden = !hasKey;
+  $("#byok-status").textContent = hasKey ? "Key set for this tab." : "";
+  $("#byok-key-input").placeholder = hasKey ? "sk-… (already set)" : "sk-…";
+}
+
 function updateAskAvailability(data) {
+  updateByokBanner(data);
+  const keyless = !data.has_api_key;
+  const hasUsableKey = data.has_api_key || !!getByokKey();
+  const missingKeyHint = keyless
+    ? "Paste your OpenAI API key above first."
+    : "Set OPENAI_API_KEY in .env first.";
+
   const btn = $("#btn-ask");
   const hint = $("#ask-disabled-hint");
-  const disabled = !data.index_exists || !data.has_api_key;
+  const disabled = !data.index_exists || !hasUsableKey;
   btn.disabled = disabled;
   hint.hidden = !disabled;
-  hint.textContent = !data.has_api_key
-    ? "Set OPENAI_API_KEY in .env first."
-    : "Build the index first, in the \"Build the Index\" tab.";
+  hint.textContent = !hasUsableKey ? missingKeyHint : "Build the index first, in the \"Build the Index\" tab.";
 
   const evalBtn = $("#btn-eval");
   const evalHint = $("#eval-disabled-hint");
   evalBtn.disabled = disabled;
   evalHint.hidden = !disabled;
   evalHint.textContent = hint.textContent;
+
+  const ingestBtn = $("#btn-ingest");
+  const ingestHint = $("#ingest-disabled-hint");
+  if (ingestBtn) {
+    ingestBtn.disabled = !hasUsableKey;
+    if (ingestHint) {
+      ingestHint.hidden = hasUsableKey;
+      ingestHint.textContent = missingKeyHint;
+    }
+  }
 }
+
+$("#byok-save").addEventListener("click", () => {
+  const input = $("#byok-key-input");
+  const key = input.value.trim();
+  if (!key) return;
+  setByokKey(key);
+  input.value = "";
+  checkStatus();
+});
+$("#byok-key-input").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") $("#byok-save").click();
+});
+$("#byok-clear").addEventListener("click", () => {
+  setByokKey("");
+  checkStatus();
+});
 
 // --------------------------------------------------------- pipeline UI ----
 
@@ -367,7 +502,7 @@ function startIngest() {
   btn.disabled = true;
   resetIngestUI();
 
-  const es = new EventSource("/api/ingest/stream");
+  const es = new FetchEventSource("/api/ingest/stream", { headers: authHeaders() });
   const close = () => {
     es.close();
     btn.disabled = false;
@@ -765,7 +900,7 @@ function askQuestion() {
   currentTiming = null;
 
   const url = `/api/ask/stream?question=${encodeURIComponent(question)}`;
-  const es = new EventSource(url);
+  const es = new FetchEventSource(url, { headers: authHeaders() });
   const close = () => {
     es.close();
     btn.disabled = false;
@@ -1151,7 +1286,6 @@ function appendResultRow(tbody, cells, okCell) {
 
 function resetEvalUI() {
   $("#eval-progress").textContent = "";
-  $("#eval-scores").hidden = true;
   $("#metric-recall").textContent = "—";
   $("#metric-faithfulness").textContent = "—";
   $("#metric-hallucination").textContent = "";
@@ -1162,17 +1296,65 @@ function resetEvalUI() {
   $("#log-eval").innerHTML = "";
 }
 
+function fmtSnapshotDate(iso) {
+  try {
+    return new Date(iso).toLocaleString("en-GB", { dateStyle: "medium", timeStyle: "short" });
+  } catch {
+    return iso;
+  }
+}
+
+async function loadEvalSnapshot() {
+  try {
+    const res = await fetch("/api/eval/snapshot");
+    if (!res.ok) {
+      $("#eval-source-label").textContent = "No snapshot committed yet — click \"Run evaluation live\" below.";
+      return;
+    }
+    const snap = await res.json();
+    $("#metric-recall").textContent = `${Math.round(snap.recall * 100)}%`;
+    $("#metric-faithfulness").textContent = `${Math.round(snap.faithfulness * 100)}%`;
+    $("#metric-hallucination").textContent =
+      `Hallucination rate: ${Math.round((1 - snap.faithfulness) * 100)}% (= 1 − faithfulness, derived, not a separate measurement)`;
+    $("#eval-source-label").textContent =
+      `Snapshot computed ${fmtSnapshotDate(snap.generated_at)} against this exact index (${snap.embedding_model} / ${snap.chat_model}) — committed to the repo, not live.`;
+
+    const recallTbody = createResultsTable($("#eval-recall-table"), ["Question", "Expected", "Retrieved", "Result"]);
+    $("#eval-recall-section").hidden = false;
+    snap.recall_items.forEach((item) => {
+      appendResultRow(
+        recallTbody,
+        [item.question, item.expected_sources.join(", "), item.retrieved_sources.join(", "), item.hit ? "hit" : "miss"],
+        { index: 3, ok: item.hit }
+      );
+    });
+
+    const faithTbody = createResultsTable($("#eval-faithfulness-table"), ["Question", "Verdict"]);
+    $("#eval-faithfulness-section").hidden = false;
+    snap.faithfulness_items.forEach((item) => {
+      appendResultRow(
+        faithTbody,
+        [item.question, item.is_faithful ? "faithful" : "not faithful"],
+        { index: 1, ok: item.is_faithful }
+      );
+    });
+  } catch (err) {
+    $("#eval-source-label").textContent = "Could not load the eval snapshot.";
+  }
+}
+
 function runEvaluation() {
   const btn = $("#btn-eval");
   btn.disabled = true;
   resetEvalUI();
+  $("#eval-source-label").textContent = "Running live against your own key…";
   $("#eval-progress").textContent = "Running Recall@K…";
 
   const recallTbody = createResultsTable($("#eval-recall-table"), ["Question", "Expected", "Retrieved", "Result"]);
   $("#eval-recall-section").hidden = false;
   let faithTbody = null;
 
-  const es = new EventSource("/api/eval/stream");
+  const es = new FetchEventSource("/api/eval/stream", { headers: authHeaders() });
   const close = () => {
     es.close();
     btn.disabled = false;
@@ -1222,6 +1404,7 @@ function runEvaluation() {
   es.addEventListener("pipeline_done", (e) => {
     appendLog("log-eval", "pipeline_done", JSON.parse(e.data));
     $("#eval-progress").textContent = "Done.";
+    $("#eval-source-label").textContent = "Live run — just now, against this exact index, with your key.";
     close();
   });
 
@@ -1229,6 +1412,7 @@ function runEvaluation() {
     const payload = JSON.parse(e.data);
     appendLog("log-eval", "pipeline_error", payload, true);
     $("#eval-progress").textContent = `Error: ${payload.message}`;
+    $("#eval-source-label").textContent = "Live run failed — showing whatever loaded before the error.";
     close();
   });
 
@@ -1236,6 +1420,7 @@ function runEvaluation() {
 }
 
 $("#btn-eval").addEventListener("click", runEvaluation);
+loadEvalSnapshot();
 
 // ----------------------------------------------------------- latency ------
 //
