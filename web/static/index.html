@@ -29,6 +29,7 @@
   <button class="tab-btn active" data-tab="init">1. Build the Index</button>
   <button class="tab-btn" data-tab="ask">2. Ask a Question</button>
   <button class="tab-btn" data-tab="explore">3. Explore the Data</button>
+  <button class="tab-btn" data-tab="metrics">4. Metrics &amp; Concepts</button>
 </nav>
 
 <main>
@@ -182,6 +183,23 @@
         <div class="box-output-content"></div>
       </div>
 
+      <details class="agent-note">
+        <summary>Is this an AI agent that iterates until it's "done"?</summary>
+        <p><strong>No.</strong> The pipeline above runs top to bottom exactly once, no loop-back:
+          one embedding call, one search, one prompt, one generation call. The model never decides
+          to search again, ask a follow-up, or judge whether it has "enough" context — that
+          decision doesn't exist here. This is <strong>classic (non-agentic) RAG</strong>.</p>
+        <p>It's built with the raw <span class="term-tooltip" tabindex="0" data-tooltip="No framework — just client.chat.completions.create() and client.embeddings.create() from the openai Python package. See src/rag.py and src/embeddings.py in the Explore tab's code viewer.">OpenAI Python SDK</span> —
+          <strong>no LangChain, no LangGraph</strong>, no agent framework of any kind.</p>
+        <p>An <em>agentic</em> version would look different: expose <code>retrieve()</code> as a
+          <span class="term-tooltip" tabindex="0" data-tooltip="Giving an LLM a set of callable functions with typed arguments, so it can decide during generation which ones to call and with what input — e.g. OpenAI function calling / tool calling.">tool</span>
+          the model can call zero, one, or several times, and let the model itself decide when it
+          has enough information before answering (the
+          <span class="term-tooltip" tabindex="0" data-tooltip="Reason + Act: a prompting pattern where the model alternates between reasoning about what to do next and taking an action (like calling a tool), observing the result, and repeating — until it decides it's ready to give a final answer.">ReAct pattern</span>).
+          That trades predictability and cost for flexibility — see the Concepts tab for more on
+          both.</p>
+      </details>
+
       <div class="card">
         <h3>Your question, turned into a vector</h3>
         <p class="muted small">
@@ -199,6 +217,28 @@
         </p>
         <div id="score-bars" class="score-bars">
           <p class="muted">Scores will appear here as soon as they're computed.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Vector map — where your question landed
+          <span class="info-icon" tabindex="0" data-tooltip="Every chunk's real 1536-dimension vector is compressed down to 2 dimensions with PCA (principal component analysis) just so it can be drawn on a flat plane. Distances here are a rough approximation of the real embedding space — useful for intuition, not the literal geometry the model uses.">ⓘ</span>
+        </h3>
+        <p class="muted small">
+          Every dot is a chunk in the index, projected into the same 2D space as your question
+          (the ⭐). The dashed lines connect it to the real top-K chunks — the ones actually used
+          as context — highlighted in blue. Click any dot to make <em>it</em> the reference point
+          and see its real cosine distance to every other chunk (a fresh search, from that
+          chunk's own stored vector — no extra OpenAI call needed); hover any dot for the exact
+          number. Drag to pan, scroll/pinch to zoom.
+        </p>
+        <div class="vector-map-toolbar">
+          <button id="vector-map-reset-view" class="btn-chip" type="button">Reset view</button>
+          <button id="vector-map-reset-ref" class="btn-chip" type="button" hidden>← Back to your question</button>
+          <span id="vector-map-ref-label" class="muted small"></span>
+        </div>
+        <div id="vector-map" class="vector-map">
+          <p class="muted">The map will appear here once a search runs.</p>
         </div>
       </div>
 
@@ -276,6 +316,147 @@
           <button class="chip-btn" data-code-key="prompt">Building the prompt</button>
         </div>
         <div id="code-viewer" class="code-viewer"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= TAB: METRICS & CONCEPTS ======================= -->
+  <section id="tab-metrics" class="tab-panel">
+    <p class="hint">
+      Real evaluation numbers for this exact index (not illustrative placeholders), the actual
+      latency of the questions you've asked this session, and a glossary of RAG/AI-engineering
+      concepts — including which ones this small demo deliberately doesn't need.
+    </p>
+
+    <div class="panel">
+      <div class="card">
+        <h3>Evaluation metrics
+          <span class="info-icon" tabindex="0" data-tooltip="Runs eval/evaluate.py's Recall@K and Faithfulness (LLM-as-judge) against the 10-question golden dataset — the same code the CLI uses (python -m eval.evaluate), just streamed live to this page.">ⓘ</span>
+        </h3>
+        <p class="muted small">
+          Runs the 10-question golden dataset against this index: ~30 real OpenAI API calls
+          (10 question embeddings + 10 answers + 10 judge calls), takes roughly a minute.
+        </p>
+        <div class="panel-row">
+          <button id="btn-eval" class="btn btn-primary">Run evaluation</button>
+          <span id="eval-progress" class="progress-text"></span>
+        </div>
+        <p id="eval-disabled-hint" class="muted small" hidden>
+          Build the index first, in the "Build the Index" tab.
+        </p>
+
+        <div class="grid-2" id="eval-scores" hidden>
+          <div class="metric-tile">
+            <div class="metric-value" id="metric-recall">—</div>
+            <div class="metric-label">Recall@K
+              <span class="info-icon" tabindex="0" data-tooltip="Of the 10 golden questions, what fraction had their expected source document among the top-K chunks retrieved? Measures the retriever, independent of the LLM.">ⓘ</span>
+            </div>
+          </div>
+          <div class="metric-tile">
+            <div class="metric-value" id="metric-faithfulness">—</div>
+            <div class="metric-label">Faithfulness
+              <span class="info-icon" tabindex="0" data-tooltip="Of the 10 generated answers, what fraction were judged (by a second LLM call) to be fully supported by the retrieved context, with nothing invented? Measures the generator, given whatever the retriever found.">ⓘ</span>
+            </div>
+            <div class="metric-derived" id="metric-hallucination"></div>
+          </div>
+        </div>
+
+        <div id="eval-recall-section" hidden>
+          <h4>Recall@K — per question</h4>
+          <div id="eval-recall-table"></div>
+        </div>
+        <div id="eval-faithfulness-section" hidden>
+          <h4>Faithfulness — per question</h4>
+          <div id="eval-faithfulness-table"></div>
+        </div>
+
+        <details class="log-details">
+          <summary>Raw event log</summary>
+          <div id="log-eval" class="event-log"></div>
+        </details>
+      </div>
+
+      <div class="card">
+        <h3>Where the time goes
+          <span class="info-icon" tabindex="0" data-tooltip="Real per-stage timings captured from the actual SSE events during your last question — not simulated. Ask a question in tab 2 to populate this.">ⓘ</span>
+        </h3>
+        <div id="latency-breakdown">
+          <p class="muted">No question asked yet this session — ask one in the "Ask a Question" tab.</p>
+        </div>
+        <div id="latency-distribution"></div>
+      </div>
+
+      <div class="card">
+        <h3>Concepts glossary</h3>
+        <div class="concept-list" id="concept-list">
+          <div class="concept">
+            <h4>RAG (Retrieval Augmented Generation)</h4>
+            <p>Instead of relying only on what the model memorized during training, RAG retrieves
+              relevant text from an external knowledge base at request time and feeds it to the
+              model as context before it answers. Every tab on this page demonstrates one half of
+              that: retrieval (Build the Index, Explore) and generation (Ask a Question).</p>
+          </div>
+          <div class="concept">
+            <h4>Chunking &amp; embedding model</h4>
+            <p>Documents are too long to embed or feed to an LLM whole, so they're split into
+              smaller, overlapping pieces (chunks), each turned into a vector by an embedding
+              model (<code>text-embedding-3-small</code> here). Chunk size and overlap are a real
+              design decision — see the Explore tab to see it happen on real documents.</p>
+          </div>
+          <div class="concept">
+            <h4>Golden dataset</h4>
+            <p>A hand-written set of representative questions paired with the source document each
+              one should retrieve, used to measure retrieval quality instead of guessing. This
+              demo's 10-question dataset lives in <code>eval/golden_dataset.json</code> and drives
+              the Recall@K score above.</p>
+          </div>
+          <div class="concept">
+            <h4>LLM-as-a-judge</h4>
+            <p>Using a second LLM call to grade the first one's output — here, checking whether a
+              generated answer is actually supported by the retrieved context or invented
+              something. Cheap and scales better than manual review, but imperfect: the judge can
+              be wrong too, especially on borderline cases.</p>
+          </div>
+          <div class="concept">
+            <h4>Fine-tuning vs RAG</h4>
+            <p>Fine-tuning bakes new knowledge into the model's weights through additional
+              training; RAG keeps the model frozen and injects knowledge at request time via
+              retrieval. This demo uses RAG because the knowledge base needs to stay trivially
+              editable (edit a markdown file, rebuild the index) and every answer needs to cite
+              its exact source — much harder to guarantee with fine-tuning.</p>
+          </div>
+          <div class="concept concept-not-used">
+            <h4>ReAct pattern (Reason + Act) <span class="not-used-badge">not used in this demo</span></h4>
+            <p>A prompting pattern where the model alternates between reasoning about what to do
+              next, taking an action (like calling a tool), observing the result, and deciding
+              whether to act again or answer — repeating until <em>it</em> decides it has enough.
+              See "Is this an AI agent?" in the Ask a Question tab for what changes if you add it.</p>
+          </div>
+          <div class="concept concept-not-used">
+            <h4>Tool calling in agents <span class="not-used-badge">not used in this demo</span></h4>
+            <p>Giving an LLM a set of callable functions with typed arguments so it can decide
+              during generation which ones to invoke and with what input. An agentic version of
+              this demo would expose <code>retrieve()</code> as a tool the model calls on its own
+              terms, instead of it always running first, unconditionally, as it does here.</p>
+          </div>
+        </div>
+
+        <p class="muted small not-covered-note">
+          <strong>Not covered here, and why</strong> — these are real, useful concepts, just not
+          ones a small local demo like this one has anything to compute:
+        </p>
+        <ul class="not-covered-list muted small">
+          <li><strong>DORA metrics</strong> (deployment frequency, lead time, change failure rate,
+            MTTR) measure software delivery performance for teams shipping continuously to
+            production — this demo has no CI/CD pipeline or deployment history.</li>
+          <li><strong>CodeScene / code ownership analysis</strong> mines git history across many
+            contributors to flag hotspots and knowledge silos in large, long-lived codebases —
+            this is a single-author educational project.</li>
+          <li><strong>EU AI Act high-risk classification</strong> is a legal framework for
+            classifying real production AI systems (a real healthtech assistant plausibly would
+            need it) — there's no live regulatory classification to compute for a local synthetic
+            demo with fake data.</li>
+        </ul>
       </div>
     </div>
   </section>

@@ -10,6 +10,8 @@ answer(pregunta) hace exactamente lo que describimos en la teoría:
 """
 from __future__ import annotations
 
+import time
+
 from openai import OpenAI
 
 from . import config
@@ -57,6 +59,7 @@ def answer(question: str, top_k: int | None = None, on_event: EventCallback | No
             {"role": "user", "content": prompt},
         ]
         emit(on_event, "llm_start", model=config.CHAT_MODEL)
+        t_llm = time.time()
 
         if on_event is None:
             # Camino sin instrumentar (chat.py, eval/evaluate.py): sin streaming,
@@ -85,7 +88,7 @@ def answer(question: str, top_k: int | None = None, on_event: EventCallback | No
                     emit(on_event, "llm_token", delta=delta)
             full_answer = "".join(parts)
 
-        emit(on_event, "llm_done", answer=full_answer)
+        emit(on_event, "llm_done", answer=full_answer, elapsed_ms=int((time.time() - t_llm) * 1000))
         emit(on_event, "answer_done", answer=full_answer, sources=sources, chunks=chunks)
         return {
             "answer": full_answer,

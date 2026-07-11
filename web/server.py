@@ -26,10 +26,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from eval.evaluate import evaluate_faithfulness, evaluate_recall_at_k, load_golden_dataset
 from src import chunking, config, embeddings, rag, vector_store
 from src.ingest import build_index, load_documents
 from src.rag import answer
-from src.retriever import reset_store
+from src.retriever import reset_store, similarity_from_indexed_chunk
 
 app = FastAPI(title="RAG demo — pipeline en vivo")
 
@@ -225,6 +226,21 @@ def kb_vector(source: str, chunk_index: int):
     }
 
 
+@app.get("/api/kb/similarity")
+def kb_similarity(source: str, chunk_index: int):
+    """Cosine similarity from one already-indexed chunk to every other chunk
+    in the index, in the same shape as search_done's all_scores. Lets the
+    vector map show real distances from any chunk the user clicks on, using
+    that chunk's own stored vector — no extra embedding call needed.
+    """
+    if not config.INDEX_VECTORS_PATH.exists():
+        raise HTTPException(status_code=404, detail="Todavía no se construyó el índice.")
+    try:
+        return similarity_from_indexed_chunk(source, chunk_index)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+
 @app.get("/api/code")
 def get_code(key: str):
     """Código fuente real de una de las funciones del pipeline, vía
@@ -241,6 +257,38 @@ def get_code(key: str):
             for f in funcs
         ],
     }
+
+
+@app.get("/api/eval/golden")
+def eval_golden():
+    return load_golden_dataset()
+
+
+@app.get("/api/eval/stream")
+def eval_stream():
+    """Corre Recall@K + Faithfulness (LLM-as-judge) contra el golden dataset.
+
+    ~30 llamadas reales a la API de OpenAI (10 embeddings de pregunta + 10
+    respuestas + 10 juicios), toma cerca de un minuto — el frontend avisa
+    el costo/tiempo antes de este botón.
+    """
+    if not config.INDEX_VECTORS_PATH.exists():
+        return _immediate_error(
+            "No hay índice construido todavía. Andá a la pestaña 'Build the Index' y construilo primero."
+        )
+    if not config.OPENAI_API_KEY:
+        return _immediate_error(
+            "Falta OPENAI_API_KEY. Copiá .env.example a .env y completá tu clave "
+            "(ver README.md, sección 'Cómo correrlo')."
+        )
+
+    def target(on_event):
+        golden = load_golden_dataset()
+        recall = evaluate_recall_at_k(golden, on_event=on_event)
+        faithfulness = evaluate_faithfulness(golden, on_event=on_event)
+        return {"recall": recall, "faithfulness": faithfulness}
+
+    return run_pipeline_as_sse(target)
 
 
 @app.get("/api/ingest/stream")

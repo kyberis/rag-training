@@ -67,6 +67,12 @@ function updateAskAvailability(data) {
   hint.textContent = !data.has_api_key
     ? "Set OPENAI_API_KEY in .env first."
     : "Build the index first, in the \"Build the Index\" tab.";
+
+  const evalBtn = $("#btn-eval");
+  const evalHint = $("#eval-disabled-hint");
+  evalBtn.disabled = disabled;
+  evalHint.hidden = !disabled;
+  evalHint.textContent = hint.textContent;
 }
 
 // --------------------------------------------------------- pipeline UI ----
@@ -481,6 +487,10 @@ function resetAskUI() {
   resetPipeline("pipeline-ask");
   $("#embedding-strip").innerHTML = "";
   $("#score-bars").innerHTML = "";
+  $("#vector-map").innerHTML = "";
+  $("#vector-map-ref-label").textContent = "";
+  $("#vector-map-reset-ref").hidden = true;
+  lastQueryVectorMapData = null;
   $("#prompt-text").textContent = "";
   $("#answer-text").textContent = "";
   $("#sources-chips").innerHTML = "";
@@ -535,6 +545,214 @@ function renderScoreBars(allScores, topKSources) {
   });
 }
 
+// The last real search's map data, cached so "← Back to your question" can
+// restore it locally without re-running the question.
+let lastQueryVectorMapData = null;
+
+async function rerootVectorMap(source, chunkIndex) {
+  const label = `${source} #${chunkIndex}`;
+  const refLabelEl = $("#vector-map-ref-label");
+  refLabelEl.textContent = `Loading neighbors of ${label}…`;
+  try {
+    const res = await fetch(`/api/kb/similarity?source=${encodeURIComponent(source)}&chunk_index=${chunkIndex}`);
+    if (!res.ok) {
+      refLabelEl.textContent = "Could not load that chunk's neighbors.";
+      return;
+    }
+    const data = await res.json();
+    const self = data.all_scores.find((s) => s.source === source && s.chunk_index === chunkIndex);
+    // No topKSources here on purpose: "top-K used as context" isn't a
+    // meaningful concept for an arbitrary chunk-to-chunk similarity view,
+    // so renderVectorMap skips the lines/highlighting entirely.
+    renderVectorMap($("#vector-map"), data.all_scores, [], { x: self.x, y: self.y }, label);
+    refLabelEl.textContent = `Showing neighbors of: ${label}`;
+    $("#vector-map-reset-ref").hidden = false;
+  } catch (err) {
+    refLabelEl.textContent = "Could not load that chunk's neighbors.";
+  }
+}
+
+$("#vector-map-reset-ref").addEventListener("click", () => {
+  if (!lastQueryVectorMapData) return;
+  const { allScores, topKSources, referencePoint } = lastQueryVectorMapData;
+  renderVectorMap($("#vector-map"), allScores, topKSources, referencePoint, "Your question");
+  $("#vector-map-ref-label").textContent = "";
+  $("#vector-map-reset-ref").hidden = true;
+});
+
+// Pan/zoom window into the map's fixed 560×340 coordinate space. Persists
+// across re-renders that keep the same question (reroot / back-to-question)
+// so panning/zooming isn't lost when the reference point changes; only a
+// fresh question or the explicit "Reset view" button snaps it back.
+const VECTOR_MAP_W = 560, VECTOR_MAP_H = 340;
+let vectorMapView = { x: 0, y: 0, w: VECTOR_MAP_W, h: VECTOR_MAP_H };
+
+function resetVectorMapView() {
+  vectorMapView = { x: 0, y: 0, w: VECTOR_MAP_W, h: VECTOR_MAP_H };
+  const svg = document.querySelector("#vector-map .vector-map-svg");
+  if (svg) svg.setAttribute("viewBox", `${vectorMapView.x} ${vectorMapView.y} ${vectorMapView.w} ${vectorMapView.h}`);
+}
+
+$("#vector-map-reset-view").addEventListener("click", resetVectorMapView);
+
+// Drag-to-pan and wheel/pinch-to-zoom over the map's viewBox. Dot/query
+// clicks are excluded from starting a drag (checked by the caller via
+// e.target's class) so re-centering still works with a single click.
+function attachVectorMapPanZoom(svg) {
+  let dragging = false;
+  let lastClientX = 0, lastClientY = 0;
+
+  svg.addEventListener("pointerdown", (e) => {
+    if (e.target.closest(".vector-dot, .vector-query")) return;
+    dragging = true;
+    lastClientX = e.clientX;
+    lastClientY = e.clientY;
+    svg.classList.add("grabbing");
+    svg.setPointerCapture(e.pointerId);
+  });
+
+  svg.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    const rect = svg.getBoundingClientRect();
+    vectorMapView.x -= (e.clientX - lastClientX) * (vectorMapView.w / rect.width);
+    vectorMapView.y -= (e.clientY - lastClientY) * (vectorMapView.h / rect.height);
+    lastClientX = e.clientX;
+    lastClientY = e.clientY;
+    svg.setAttribute("viewBox", `${vectorMapView.x} ${vectorMapView.y} ${vectorMapView.w} ${vectorMapView.h}`);
+  });
+
+  const endDrag = (e) => {
+    dragging = false;
+    svg.classList.remove("grabbing");
+    if (e && svg.hasPointerCapture(e.pointerId)) svg.releasePointerCapture(e.pointerId);
+  };
+  svg.addEventListener("pointerup", endDrag);
+  svg.addEventListener("pointercancel", endDrag);
+
+  svg.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const rect = svg.getBoundingClientRect();
+    const nx = (e.clientX - rect.left) / rect.width;
+    const ny = (e.clientY - rect.top) / rect.height;
+    const worldX = vectorMapView.x + nx * vectorMapView.w;
+    const worldY = vectorMapView.y + ny * vectorMapView.h;
+
+    const factor = e.deltaY > 0 ? 1.1 : 0.9;
+    const minW = VECTOR_MAP_W * 0.1, maxW = VECTOR_MAP_W * 1.5;
+    const newW = Math.min(maxW, Math.max(minW, vectorMapView.w * factor));
+    const newH = newW * (VECTOR_MAP_H / VECTOR_MAP_W);
+
+    vectorMapView.x = worldX - nx * newW;
+    vectorMapView.y = worldY - ny * newH;
+    vectorMapView.w = newW;
+    vectorMapView.h = newH;
+    svg.setAttribute("viewBox", `${vectorMapView.x} ${vectorMapView.y} ${vectorMapView.w} ${vectorMapView.h}`);
+  }, { passive: false });
+}
+
+// 2D scatter of every chunk's PCA-projected vector plus a reference point
+// (your question, or — after clicking a dot — an indexed chunk's own
+// vector), in the same projected space computed server-side in
+// retriever.py, so the frontend never touches raw 1536-dim numbers. Reuses
+// the same "which rows are really top-K" trick as renderScoreBars: allScores
+// is sorted by score, so the first N whose source appears in topKSources are
+// the real top-K. Pass an empty topKSources to skip the top-K
+// lines/highlighting entirely — that's what chunk-to-chunk reroot mode does,
+// since "top-K actually used as context" isn't a meaningful concept there.
+function renderVectorMap(container, allScores, topKSources, referencePoint, referenceLabel) {
+  container.innerHTML = "";
+  if (!allScores.length) {
+    const msg = document.createElement("p");
+    msg.className = "muted";
+    msg.textContent = "No chunks to show yet.";
+    container.appendChild(msg);
+    return;
+  }
+
+  const xs = allScores.map((s) => s.x).concat([referencePoint.x]);
+  const ys = allScores.map((s) => s.y).concat([referencePoint.y]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const padX = (maxX - minX || 1) * 0.15;
+  const padY = (maxY - minY || 1) * 0.15;
+  const rangeX = (maxX - minX) + padX * 2 || 1;
+  const rangeY = (maxY - minY) + padY * 2 || 1;
+
+  const W = VECTOR_MAP_W, H = VECTOR_MAP_H;
+  const toPx = (x, y) => [
+    ((x - minX + padX) / rangeX) * W,
+    H - ((y - minY + padY) / rangeY) * H, // flip Y so it doesn't read upside down
+  ];
+
+  const topKSet = new Set();
+  const remaining = new Map();
+  topKSources.forEach((src) => remaining.set(src, (remaining.get(src) || 0) + 1));
+  allScores.forEach((s) => {
+    const left = remaining.get(s.source) || 0;
+    if (left > 0) {
+      topKSet.add(`${s.source}#${s.chunk_index}`);
+      remaining.set(s.source, left - 1);
+    }
+  });
+
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("viewBox", `${vectorMapView.x} ${vectorMapView.y} ${vectorMapView.w} ${vectorMapView.h}`);
+  svg.setAttribute("class", "vector-map-svg");
+
+  const [qx, qy] = toPx(referencePoint.x, referencePoint.y);
+
+  // Lines first, so the dots render on top of them.
+  allScores.forEach((s) => {
+    if (!topKSet.has(`${s.source}#${s.chunk_index}`)) return;
+    const [px, py] = toPx(s.x, s.y);
+    const line = document.createElementNS(svgNS, "line");
+    line.setAttribute("x1", qx);
+    line.setAttribute("y1", qy);
+    line.setAttribute("x2", px);
+    line.setAttribute("y2", py);
+    line.setAttribute("class", "vector-link");
+    svg.appendChild(line);
+  });
+
+  allScores.forEach((s) => {
+    const isTopK = topKSet.has(`${s.source}#${s.chunk_index}`);
+    const [px, py] = toPx(s.x, s.y);
+    const circle = document.createElementNS(svgNS, "circle");
+    circle.setAttribute("cx", px);
+    circle.setAttribute("cy", py);
+    circle.setAttribute("r", isTopK ? 6 : 3.5);
+    circle.setAttribute("class", "vector-dot" + (isTopK ? " topk" : ""));
+    const title = document.createElementNS(svgNS, "title");
+    title.textContent = `${s.source} #${s.chunk_index} — score ${s.score.toFixed(3)} (click to re-center here)`;
+    circle.appendChild(title);
+    circle.addEventListener("click", () => rerootVectorMap(s.source, s.chunk_index));
+    svg.appendChild(circle);
+  });
+
+  const query = document.createElementNS(svgNS, "circle");
+  query.setAttribute("cx", qx);
+  query.setAttribute("cy", qy);
+  query.setAttribute("r", 7);
+  query.setAttribute("class", "vector-query");
+  const qTitle = document.createElementNS(svgNS, "title");
+  qTitle.textContent = referenceLabel;
+  query.appendChild(qTitle);
+  svg.appendChild(query);
+
+  container.appendChild(svg);
+  attachVectorMapPanZoom(svg);
+
+  const legend = document.createElement("div");
+  legend.className = "vector-map-legend";
+  legend.innerHTML = `
+    <span><span class="legend-swatch legend-query"></span>reference point</span>
+    <span><span class="legend-swatch legend-topk"></span>top-K (used as context)</span>
+    <span><span class="legend-swatch legend-dot"></span>other chunks</span>
+  `;
+  container.appendChild(legend);
+}
+
 function askQuestion() {
   const input = $("#question-input");
   const question = input.value.trim();
@@ -544,6 +762,7 @@ function askQuestion() {
   btn.disabled = true;
   resetAskUI();
   setBoxState("pipeline-ask", "question", "active");
+  currentTiming = null;
 
   const url = `/api/ask/stream?question=${encodeURIComponent(question)}`;
   const es = new EventSource(url);
@@ -559,6 +778,7 @@ function askQuestion() {
     recordBoxPayload(askBoxPayloads, "question", "question_received", payload);
     setBoxState("pipeline-ask", "question", "done");
     setAskBoxDetail("question", payload.question.length > 28 ? payload.question.slice(0, 28) + "…" : payload.question);
+    currentTiming = { t_question: payload.ts };
   });
 
   es.addEventListener("embedding_query_start", (e) => {
@@ -573,20 +793,35 @@ function askQuestion() {
     setAskBoxDetail("embedding", `${payload.dim} dims`);
     $("#embedding-dim").textContent = payload.dim;
     renderEmbeddingStripInto($("#embedding-strip"), payload.preview);
+    if (currentTiming) currentTiming.embedding_ms = payload.elapsed_ms;
   });
 
   es.addEventListener("search_start", (e) => {
-    appendLog("log-ask", "search_start", JSON.parse(e.data));
+    const payload = JSON.parse(e.data);
+    appendLog("log-ask", "search_start", payload);
     setBoxState("pipeline-ask", "search", "active");
+    if (currentTiming) currentTiming.t_search_start = payload.ts;
   });
 
   es.addEventListener("search_done", (e) => {
     const payload = JSON.parse(e.data);
     appendLog("log-ask", "search_done", payload);
     setBoxState("pipeline-ask", "search", "done");
+    if (currentTiming && currentTiming.t_search_start) {
+      currentTiming.search_ms = Math.max(0, Math.round((payload.ts - currentTiming.t_search_start) * 1000));
+    }
     setAskBoxDetail("search", `${payload.all_scores.length} chunks scored`);
     setBoxState("pipeline-ask", "topk", "active");
     renderScoreBars(payload.all_scores, payload.top_k_sources);
+    lastQueryVectorMapData = {
+      allScores: payload.all_scores,
+      topKSources: payload.top_k_sources,
+      referencePoint: payload.query_projection,
+    };
+    vectorMapView = { x: 0, y: 0, w: VECTOR_MAP_W, h: VECTOR_MAP_H }; // fresh question: forget any old pan/zoom
+    renderVectorMap($("#vector-map"), payload.all_scores, payload.top_k_sources, payload.query_projection, "Your question");
+    $("#vector-map-ref-label").textContent = "";
+    $("#vector-map-reset-ref").hidden = true;
     setBoxState("pipeline-ask", "topk", "done");
     setAskBoxDetail("topk", `${payload.top_k_sources.length} selected`);
   });
@@ -625,6 +860,13 @@ function askQuestion() {
     appendLog("log-ask", "llm_done", payload);
     recordBoxPayload(askBoxPayloads, "llm", "llm_done", payload);
     setBoxState("pipeline-ask", "llm", "done");
+    if (currentTiming && currentTiming.embedding_ms != null && currentTiming.search_ms != null) {
+      currentTiming.llm_ms = payload.elapsed_ms;
+      currentTiming.total_ms = Math.max(0, Math.round((payload.ts - currentTiming.t_question) * 1000));
+      renderLatencyBreakdown(currentTiming);
+      sessionLatencies.push(currentTiming.total_ms);
+      renderLatencyDistribution();
+    }
   });
 
   es.addEventListener("answer_done", (e) => {
@@ -867,6 +1109,207 @@ $$("#code-picker .chip-btn").forEach((btn) => {
     loadCodeSnippet(btn.dataset.codeKey);
   });
 });
+
+// ============================================================== EVAL ======
+//
+// Runs eval/evaluate.py's Recall@K and Faithfulness (LLM-as-judge) — the
+// same functions the CLI (`python -m eval.evaluate`) calls — streamed live
+// via SSE instead of printed to a terminal.
+
+function createResultsTable(container, headers) {
+  container.innerHTML = "";
+  const wrap = document.createElement("div");
+  wrap.className = "db-table-wrap";
+  const table = document.createElement("table");
+  table.className = "db-table";
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  headers.forEach((h) => {
+    const th = document.createElement("th");
+    th.textContent = h;
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+  const tbody = document.createElement("tbody");
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+  container.appendChild(wrap);
+  return tbody;
+}
+
+function appendResultRow(tbody, cells, okCell) {
+  const tr = document.createElement("tr");
+  cells.forEach((text, i) => {
+    const td = document.createElement("td");
+    td.textContent = text;
+    if (okCell && i === okCell.index) td.className = okCell.ok ? "eval-ok" : "eval-bad";
+    tr.appendChild(td);
+  });
+  tbody.appendChild(tr);
+}
+
+function resetEvalUI() {
+  $("#eval-progress").textContent = "";
+  $("#eval-scores").hidden = true;
+  $("#metric-recall").textContent = "—";
+  $("#metric-faithfulness").textContent = "—";
+  $("#metric-hallucination").textContent = "";
+  $("#eval-recall-section").hidden = true;
+  $("#eval-faithfulness-section").hidden = true;
+  $("#eval-recall-table").innerHTML = "";
+  $("#eval-faithfulness-table").innerHTML = "";
+  $("#log-eval").innerHTML = "";
+}
+
+function runEvaluation() {
+  const btn = $("#btn-eval");
+  btn.disabled = true;
+  resetEvalUI();
+  $("#eval-progress").textContent = "Running Recall@K…";
+
+  const recallTbody = createResultsTable($("#eval-recall-table"), ["Question", "Expected", "Retrieved", "Result"]);
+  $("#eval-recall-section").hidden = false;
+  let faithTbody = null;
+
+  const es = new EventSource("/api/eval/stream");
+  const close = () => {
+    es.close();
+    btn.disabled = false;
+  };
+
+  es.addEventListener("recall_item", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-eval", "recall_item", payload);
+    appendResultRow(
+      recallTbody,
+      [payload.question, payload.expected_sources.join(", "), payload.retrieved_sources.join(", "), payload.hit ? "hit" : "miss"],
+      { index: 3, ok: payload.hit }
+    );
+  });
+
+  es.addEventListener("recall_done", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-eval", "recall_done", payload);
+    $("#metric-recall").textContent = `${Math.round(payload.recall * 100)}%`;
+    $("#eval-scores").hidden = false;
+    $("#eval-progress").textContent = "Running Faithfulness (LLM-as-judge)…";
+    faithTbody = createResultsTable($("#eval-faithfulness-table"), ["Question", "Verdict"]);
+    $("#eval-faithfulness-section").hidden = false;
+  });
+
+  es.addEventListener("faithfulness_item", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-eval", "faithfulness_item", payload);
+    appendResultRow(
+      faithTbody,
+      [payload.question, payload.is_faithful ? "faithful" : "not faithful"],
+      { index: 1, ok: payload.is_faithful }
+    );
+  });
+
+  es.addEventListener("faithfulness_done", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-eval", "faithfulness_done", payload);
+    const faithfulness = payload.score;
+    $("#metric-faithfulness").textContent = `${Math.round(faithfulness * 100)}%`;
+    // Deliberately not an independent tile: hallucination rate here is just
+    // the algebraic complement of faithfulness, not a second measurement.
+    $("#metric-hallucination").textContent =
+      `Hallucination rate: ${Math.round((1 - faithfulness) * 100)}% (= 1 − faithfulness, derived, not a separate measurement)`;
+  });
+
+  es.addEventListener("pipeline_done", (e) => {
+    appendLog("log-eval", "pipeline_done", JSON.parse(e.data));
+    $("#eval-progress").textContent = "Done.";
+    close();
+  });
+
+  es.addEventListener("pipeline_error", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-eval", "pipeline_error", payload, true);
+    $("#eval-progress").textContent = `Error: ${payload.message}`;
+    close();
+  });
+
+  es.onerror = () => close();
+}
+
+$("#btn-eval").addEventListener("click", runEvaluation);
+
+// ----------------------------------------------------------- latency ------
+//
+// Real per-stage timings from the SSE events of the question you actually
+// just asked (not simulated), plus an honestly-labeled running distribution
+// across every question asked this session — no percentiles pretending to
+// be statistically meaningful from a handful of samples.
+
+const sessionLatencies = []; // total ms per question asked this session
+let currentTiming = null;
+
+function renderLatencyBreakdown(timing) {
+  const container = $("#latency-breakdown");
+  container.innerHTML = "";
+  const total = Math.max(1, timing.embedding_ms + timing.search_ms + timing.llm_ms);
+
+  const bar = document.createElement("div");
+  bar.className = "latency-bar";
+  [
+    ["embedding", timing.embedding_ms],
+    ["search", timing.search_ms],
+    ["llm", timing.llm_ms],
+  ].forEach(([kind, ms]) => {
+    const seg = document.createElement("div");
+    seg.className = `latency-segment ${kind}`;
+    seg.style.width = `${Math.max(1, (ms / total) * 100)}%`;
+    seg.textContent = ms / total >= 0.12 ? `${ms}ms` : "";
+    bar.appendChild(seg);
+  });
+  container.appendChild(bar);
+
+  const legend = document.createElement("p");
+  legend.className = "latency-legend";
+  const parts = [
+    ["Embedding", timing.embedding_ms],
+    ["Search", timing.search_ms],
+    ["LLM", timing.llm_ms],
+    ["Total", timing.total_ms],
+  ];
+  parts.forEach(([label, ms], i) => {
+    if (i > 0) legend.append(" · ");
+    legend.append(`${label}: `);
+    const strong = document.createElement("strong");
+    strong.textContent = `${ms}ms`;
+    legend.appendChild(strong);
+  });
+  container.appendChild(legend);
+}
+
+function percentile(sortedArr, p) {
+  const idx = Math.min(sortedArr.length - 1, Math.floor(p * sortedArr.length));
+  return sortedArr[idx];
+}
+
+function renderLatencyDistribution() {
+  const container = $("#latency-distribution");
+  container.innerHTML = "";
+  const n = sessionLatencies.length;
+  const line = document.createElement("p");
+  line.className = "latency-distribution-line";
+  if (n < 2) {
+    line.textContent = `Based on ${n} question${n === 1 ? "" : "s"} asked this session — ask a ` +
+      `few more to see a real distribution (percentiles of 1-2 samples aren't meaningful).`;
+  } else {
+    const sorted = [...sessionLatencies].sort((a, b) => a - b);
+    let text = `Based on ${n} questions asked this session: min ${sorted[0]}ms · ` +
+      `P50 ${percentile(sorted, 0.5)}ms · max ${sorted[sorted.length - 1]}ms`;
+    text += n >= 5
+      ? ` · P95 ${percentile(sorted, 0.95)}ms`
+      : ` (P95/P99 need at least 5 samples — currently ${n})`;
+    line.textContent = text;
+  }
+  container.appendChild(line);
+}
 
 // -------------------------------------------------------------- init ------
 
