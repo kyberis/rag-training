@@ -199,23 +199,6 @@ def run_pipeline_as_sse(target_fn: Callable[[Callable[[str, dict], None]], dict]
     return StreamingResponse(generator(), media_type="text/event-stream")
 
 
-@app.get("/api/_debug/ratelimit")
-def _debug_ratelimit(request: Request):
-    """TEMPORARY diagnostic endpoint — remove before considering this done.
-    Exposes no secrets, just enough to tell whether the in-memory rate
-    limiter's state (and IP resolution) actually persists across requests
-    on Vercel's serverless instances.
-    """
-    ip = _client_ip(request)
-    return {
-        "resolved_ip": ip,
-        "raw_x_forwarded_for": request.headers.get("x-forwarded-for"),
-        "known_ips_in_memory": list(_ip_hits.keys()),
-        "hits_for_this_ip": len(_ip_hits.get(ip, [])),
-        "process_id": id(_ip_hits),
-    }
-
-
 @app.get("/api/status")
 def status():
     has_api_key = bool(config.OPENAI_API_KEY)
