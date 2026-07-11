@@ -22,9 +22,33 @@ function setByokKey(key) {
   else sessionStorage.removeItem(BYOK_STORAGE_KEY);
 }
 
+// ---------------------------------------------------------- demo session ---
+//
+// The landing screen's "Start the demo" button mints a UUID client-side and
+// sends it as a header on every request from then on — same mechanism as
+// the BYOK key above (sessionStorage, header-only, never a cookie or URL
+// param), so it isolates this visitor's index rebuilds/questions from every
+// other visitor's, with the server auto-expiring it after 24h (see
+// src/session_store.py). Skipping cookies keeps this consistent with BYOK
+// and means no new server-side session infrastructure beyond a header read.
+const SESSION_STORAGE_KEY = "rag_demo_session_id";
+
+function getSessionId() {
+  return sessionStorage.getItem(SESSION_STORAGE_KEY) || "";
+}
+
+function setSessionId(id) {
+  if (id) sessionStorage.setItem(SESSION_STORAGE_KEY, id);
+  else sessionStorage.removeItem(SESSION_STORAGE_KEY);
+}
+
 function authHeaders() {
   const key = getByokKey();
-  return key ? { "X-OpenAI-Key": key } : {};
+  const sessionId = getSessionId();
+  const headers = {};
+  if (key) headers["X-OpenAI-Key"] = key;
+  if (sessionId) headers["X-Session-Id"] = sessionId;
+  return headers;
 }
 
 // ------------------------------------------------------- fetch-based SSE ---
@@ -128,7 +152,7 @@ $$("[data-tab-link]").forEach((link) => {
 async function checkStatus() {
   const banner = $("#status-banner");
   try {
-    const res = await fetch("/api/status");
+    const res = await fetch("/api/status", { headers: authHeaders() });
     const data = await res.json();
     updateStatusBanner(data);
     updateAskAvailability(data);
@@ -698,7 +722,7 @@ async function rerootVectorMap(source, chunkIndex) {
   const refLabelEl = $("#vector-map-ref-label");
   refLabelEl.textContent = `Loading neighbors of ${label}…`;
   try {
-    const res = await fetch(`/api/kb/similarity?source=${encodeURIComponent(source)}&chunk_index=${chunkIndex}`);
+    const res = await fetch(`/api/kb/similarity?source=${encodeURIComponent(source)}&chunk_index=${chunkIndex}`, { headers: authHeaders() });
     if (!res.ok) {
       refLabelEl.textContent = "Could not load that chunk's neighbors.";
       return;
@@ -1505,6 +1529,56 @@ function renderLatencyDistribution() {
   container.appendChild(line);
 }
 
+// ---------------------------------------------------------- landing CTA ---
+
+function showAppShell() {
+  $("#landing").hidden = true;
+  $("#app-shell").hidden = false;
+}
+
+async function startDemoSession() {
+  const buttons = $$("#btn-start-demo, [data-start-demo-link]");
+  const statusEl = $("#landing-start-status");
+  buttons.forEach((b) => (b.disabled = true));
+  statusEl.hidden = false;
+  statusEl.textContent = "Setting up your demo instance…";
+
+  const sessionId = crypto.randomUUID();
+  try {
+    const res = await fetch("/api/session/start", {
+      method: "POST",
+      headers: { "X-Session-Id": sessionId },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      statusEl.textContent = err.detail || "Could not start the demo. Try again.";
+      buttons.forEach((b) => (b.disabled = false));
+      return;
+    }
+    setSessionId(sessionId);
+    showAppShell();
+    // "Ask a Question" first, not "Build the Index": /api/session/start
+    // already seeded a working index, so the demo is immediately usable —
+    // sending the visitor to rebuild something first would contradict that.
+    switchToTab("ask");
+    checkStatus();
+  } catch (err) {
+    statusEl.textContent = "Could not reach the server. Try again.";
+    buttons.forEach((b) => (b.disabled = false));
+  }
+}
+
+$$("#btn-start-demo, [data-start-demo-link]").forEach((btn) => {
+  btn.addEventListener("click", startDemoSession);
+});
+
 // -------------------------------------------------------------- init ------
+
+// A tab reload within the same browser tab keeps its sessionStorage, so a
+// visitor who already started a demo goes straight back into it instead of
+// seeing the landing screen again.
+if (getSessionId()) {
+  showAppShell();
+}
 
 checkStatus();

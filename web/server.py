@@ -31,7 +31,8 @@ from eval.evaluate import evaluate_faithfulness, evaluate_recall_at_k, load_gold
 from src import chunking, config, embeddings, rag, vector_store
 from src.ingest import build_index, load_documents
 from src.rag import answer
-from src.retriever import set_store, similarity_from_indexed_chunk
+from src.retriever import get_default_store, set_store, similarity_from_indexed_chunk
+from src.session_store import SESSION_TTL_SECONDS, get_session_store
 
 app = FastAPI(title="RAG demo — pipeline en vivo")
 
@@ -106,10 +107,12 @@ def _resolve_api_key(x_openai_key: str | None) -> str | None:
 _rate_limit_lock = threading.Lock()
 _ip_hits: dict[str, list[float]] = {}
 _eval_ip_hits: dict[str, list[float]] = {}
+_session_start_ip_hits: dict[str, list[float]] = {}
 _global_units: list[tuple[float, int]] = []
 
 _IP_HOURLY_LIMIT = 5           # free ask/ingest requests per IP per hour
 _EVAL_IP_DAILY_LIMIT = 1       # free live evaluation runs per IP per day
+_SESSION_START_IP_HOURLY_LIMIT = 20  # generous — costs no OpenAI money, just bounds Redis/memory session storage
 _GLOBAL_DAILY_UNIT_BUDGET = 300  # shared "OpenAI call" budget per day, all visitors combined
 _ASK_UNITS = 2                  # 1 embedding call + 1 chat completion call
 _INGEST_UNITS = 1               # chunks are embedded in a single batch call
@@ -162,6 +165,36 @@ def _check_rate_limit(request: Request, units: int, is_eval: bool) -> str | None
     return None
 
 
+def _check_session_start_limit(request: Request) -> str | None:
+    """Separate from _check_rate_limit above: starting a demo session costs
+    no OpenAI money (it's a copy of an already-computed store), so it's
+    outside the shared unit budget — but it does write to session storage
+    (Redis or in-memory), so an unlimited endpoint would let anyone script
+    thousands of sessions and inflate that storage for free.
+    """
+    now = time.time()
+    ip = _client_ip(request)
+    with _rate_limit_lock:
+        hits = _session_start_ip_hits.setdefault(ip, [])
+        hits[:] = [t for t in hits if now - t < 3600]
+        if len(hits) >= _SESSION_START_IP_HOURLY_LIMIT:
+            return "Demasiadas sesiones de demo iniciadas desde tu IP en la última hora. Probá de nuevo más tarde."
+        hits.append(now)
+    return None
+
+
+def _has_usable_index(session_id: str | None) -> bool:
+    """Whether an /api/ask/stream, /api/eval/stream or /api/kb/similarity
+    call can proceed: either this session already has its own store, or the
+    shared global index exists (in which case _get_store(session_id) will
+    lazily seed the session from it on first use).
+    """
+    if session_id:
+        if get_session_store().get(session_id) is not None:
+            return True
+    return config.INDEX_VECTORS_PATH.exists()
+
+
 def run_pipeline_as_sse(target_fn: Callable[[Callable[[str, dict], None]], dict]) -> StreamingResponse:
     """Corre target_fn(on_event) en un thread aparte y transmite cada evento
     que emita como SSE, terminando siempre con pipeline_done o pipeline_error.
@@ -200,8 +233,19 @@ def run_pipeline_as_sse(target_fn: Callable[[Callable[[str, dict], None]], dict]
 
 
 @app.get("/api/status")
-def status():
+def status(x_session_id: str | None = Header(default=None, alias="X-Session-Id")):
     has_api_key = bool(config.OPENAI_API_KEY)
+    if x_session_id:
+        session_store = get_session_store().get(x_session_id)
+        if session_store is not None:
+            return {
+                "index_exists": True,
+                "has_api_key": has_api_key,
+                "n_vectors": int(session_store.vectors.shape[0]),
+                "dim": int(session_store.vectors.shape[1]),
+            }
+        return {"index_exists": False, "has_api_key": has_api_key, "n_vectors": None, "dim": None}
+
     index_exists = config.INDEX_VECTORS_PATH.exists()
     n_vectors = dim = None
     if index_exists:
@@ -321,16 +365,20 @@ def kb_vector(source: str, chunk_index: int):
 
 
 @app.get("/api/kb/similarity")
-def kb_similarity(source: str, chunk_index: int):
+def kb_similarity(
+    source: str,
+    chunk_index: int,
+    x_session_id: str | None = Header(default=None, alias="X-Session-Id"),
+):
     """Cosine similarity from one already-indexed chunk to every other chunk
     in the index, in the same shape as search_done's all_scores. Lets the
     vector map show real distances from any chunk the user clicks on, using
     that chunk's own stored vector — no extra embedding call needed.
     """
-    if not config.INDEX_VECTORS_PATH.exists():
+    if not _has_usable_index(x_session_id):
         raise HTTPException(status_code=404, detail="Todavía no se construyó el índice.")
     try:
-        return similarity_from_indexed_chunk(source, chunk_index)
+        return similarity_from_indexed_chunk(source, chunk_index, session_id=x_session_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -376,6 +424,7 @@ def eval_snapshot():
 def eval_stream(
     request: Request,
     x_openai_key: str | None = Header(default=None, alias="X-OpenAI-Key"),
+    x_session_id: str | None = Header(default=None, alias="X-Session-Id"),
 ):
     """Corre Recall@K + Faithfulness (LLM-as-judge) contra el golden dataset.
 
@@ -383,8 +432,12 @@ def eval_stream(
     respuestas + 10 juicios), toma cerca de un minuto — el frontend avisa
     el costo/tiempo antes de este botón. Los resultados ya calculados están
     en /api/eval/snapshot si no querés gastar tu propia clave.
+
+    Si hay una sesión de demo activa (X-Session-Id), evalúa contra el índice
+    propio de esa sesión en vez del compartido — así los números reflejan
+    lo que ese visitante efectivamente construyó.
     """
-    if not config.INDEX_VECTORS_PATH.exists():
+    if not _has_usable_index(x_session_id):
         return _immediate_error(
             "No hay índice construido todavía. Andá a la pestaña 'Build the Index' y construilo primero."
         )
@@ -398,8 +451,8 @@ def eval_stream(
 
     def target(on_event):
         golden = load_golden_dataset()
-        recall = evaluate_recall_at_k(golden, on_event=on_event, api_key=api_key)
-        faithfulness = evaluate_faithfulness(golden, on_event=on_event, api_key=api_key)
+        recall = evaluate_recall_at_k(golden, on_event=on_event, api_key=api_key, session_id=x_session_id)
+        faithfulness = evaluate_faithfulness(golden, on_event=on_event, api_key=api_key, session_id=x_session_id)
         return {"recall": recall, "faithfulness": faithfulness}
 
     return run_pipeline_as_sse(target)
@@ -409,6 +462,7 @@ def eval_stream(
 def ingest_stream(
     request: Request,
     x_openai_key: str | None = Header(default=None, alias="X-OpenAI-Key"),
+    x_session_id: str | None = Header(default=None, alias="X-Session-Id"),
 ):
     if not x_openai_key:
         limit_error = _check_rate_limit(request, units=_INGEST_UNITS, is_eval=False)
@@ -419,14 +473,50 @@ def ingest_stream(
         return _immediate_error(NO_KEY_MESSAGE)
 
     def target(on_event):
-        store = build_index(on_event=on_event, api_key=api_key)
-        # Activa el store recién construido directo en memoria para esta
-        # instancia — funciona igual si el disco es de solo lectura (deploy
-        # serverless) o escribible (local): no depende de releerlo de disco.
-        set_store(store)
+        # Con sesión activa, la reconstrucción nunca se guarda en el índice
+        # compartido de disco (persist=False) — queda aislada a esa sesión.
+        store = build_index(on_event=on_event, api_key=api_key, persist=(x_session_id is None))
+        # Activa el store recién construido directo en memoria (global) o en
+        # la sesión (Redis/memoria) — funciona igual si el disco es de solo
+        # lectura (deploy serverless) o escribible (local): no depende de
+        # releerlo de disco.
+        set_store(store, session_id=x_session_id)
         return {"n_vectors": int(store.vectors.shape[0]), "dim": int(store.vectors.shape[1])}
 
     return run_pipeline_as_sse(target)
+
+
+@app.post("/api/session/start")
+def session_start(
+    request: Request,
+    x_session_id: str | None = Header(default=None, alias="X-Session-Id"),
+):
+    """Siembra una sesión de demo nueva con una copia del índice compartido,
+    así el CTA de la pantalla de aterrizaje entrega una experiencia "ya
+    construida" sin forzar una reconstrucción primero. La sesión queda
+    aislada del índice global y de cualquier otra sesión, y expira sola a
+    las 24h (ver session_store.py).
+    """
+    if not x_session_id:
+        raise HTTPException(status_code=400, detail="Falta el header X-Session-Id.")
+    limit_error = _check_session_start_limit(request)
+    if limit_error:
+        raise HTTPException(status_code=429, detail=limit_error)
+    if not config.INDEX_VECTORS_PATH.exists():
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "No hay índice construido todavía en este servidor. Si corrés esto "
+                "localmente, construilo primero: python -m src.ingest"
+            ),
+        )
+    store = get_default_store()
+    set_store(store, session_id=x_session_id)
+    return {
+        "n_vectors": int(store.vectors.shape[0]),
+        "dim": int(store.vectors.shape[1]),
+        "expires_at": int(time.time()) + SESSION_TTL_SECONDS,
+    }
 
 
 @app.get("/api/ask/stream")
@@ -435,8 +525,9 @@ def ask_stream(
     question: str,
     top_k: int | None = None,
     x_openai_key: str | None = Header(default=None, alias="X-OpenAI-Key"),
+    x_session_id: str | None = Header(default=None, alias="X-Session-Id"),
 ):
-    if not config.INDEX_VECTORS_PATH.exists():
+    if not _has_usable_index(x_session_id):
         return _immediate_error(
             "No hay índice construido todavía. Andá a la pestaña 'Inicialización' y construilo primero."
         )
@@ -449,7 +540,7 @@ def ask_stream(
         return _immediate_error(NO_KEY_MESSAGE)
 
     def target(on_event):
-        return answer(question, top_k=top_k, on_event=on_event, api_key=api_key)
+        return answer(question, top_k=top_k, on_event=on_event, api_key=api_key, session_id=x_session_id)
 
     return run_pipeline_as_sse(target)
 

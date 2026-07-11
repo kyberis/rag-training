@@ -30,7 +30,11 @@ def load_documents() -> list[dict]:
     return docs
 
 
-def build_index(on_event: EventCallback | None = None, api_key: str | None = None) -> SimpleVectorStore:
+def build_index(
+    on_event: EventCallback | None = None,
+    api_key: str | None = None,
+    persist: bool = True,
+) -> SimpleVectorStore:
     start = time.time()
     emit(on_event, "ingest_start")
     try:
@@ -88,25 +92,13 @@ def build_index(on_event: EventCallback | None = None, api_key: str | None = Non
                 elapsed_ms=int((time.time() - t0) * 1000),
             )
 
-        try:
-            store.save(config.INDEX_VECTORS_PATH, config.INDEX_META_PATH)
-            print(f"Índice guardado en {config.INDEX_DIR}/")
-            emit(
-                on_event,
-                "index_saved",
-                vectors_path=str(config.INDEX_VECTORS_PATH),
-                meta_path=str(config.INDEX_META_PATH),
-                n_vectors=store.vectors.shape[0],
-                dim=store.vectors.shape[1],
-                persisted=True,
-            )
-        except OSError as e:
-            # Read-only filesystem (the public Vercel deployment): the index
-            # still exists in memory and works for this pipeline run and this
-            # server instance — it just can't be written to disk here. See
-            # retriever.set_store(), which is what the web server uses to
-            # activate it without going through disk at all.
-            print(f"No se pudo guardar el índice en disco ({e}); sigue disponible en memoria.")
+        if not persist:
+            # Reconstrucción con alcance de sesión (ver retriever.set_store()
+            # con session_id): nunca debe pisar el índice compartido en
+            # disco, ni siquiera en local donde sí sería escribible — queda
+            # aislado en la sesión de ese visitante (Redis o memoria, ver
+            # session_store.py).
+            print("Índice de esta sesión — no se guarda en el índice compartido de disco.")
             emit(
                 on_event,
                 "index_saved",
@@ -115,8 +107,38 @@ def build_index(on_event: EventCallback | None = None, api_key: str | None = Non
                 n_vectors=store.vectors.shape[0],
                 dim=store.vectors.shape[1],
                 persisted=False,
-                note="Filesystem de solo lectura (deploy serverless) — el índice quedó activo en memoria para esta instancia, pero no en disco.",
+                note="Índice de tu sesión de demo — vive aislado ahí (24h), no se guarda en el índice compartido.",
             )
+        else:
+            try:
+                store.save(config.INDEX_VECTORS_PATH, config.INDEX_META_PATH)
+                print(f"Índice guardado en {config.INDEX_DIR}/")
+                emit(
+                    on_event,
+                    "index_saved",
+                    vectors_path=str(config.INDEX_VECTORS_PATH),
+                    meta_path=str(config.INDEX_META_PATH),
+                    n_vectors=store.vectors.shape[0],
+                    dim=store.vectors.shape[1],
+                    persisted=True,
+                )
+            except OSError as e:
+                # Read-only filesystem (the public Vercel deployment): the index
+                # still exists in memory and works for this pipeline run and this
+                # server instance — it just can't be written to disk here. See
+                # retriever.set_store(), which is what the web server uses to
+                # activate it without going through disk at all.
+                print(f"No se pudo guardar el índice en disco ({e}); sigue disponible en memoria.")
+                emit(
+                    on_event,
+                    "index_saved",
+                    vectors_path=None,
+                    meta_path=None,
+                    n_vectors=store.vectors.shape[0],
+                    dim=store.vectors.shape[1],
+                    persisted=False,
+                    note="Filesystem de solo lectura (deploy serverless) — el índice quedó activo en memoria para esta instancia, pero no en disco.",
+                )
         emit(
             on_event,
             "ingest_done",

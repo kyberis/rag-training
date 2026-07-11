@@ -16,15 +16,6 @@
   <div id="status-banner" class="status-banner status-unknown">Checking status…</div>
 </header>
 
-<div id="byok-banner" class="byok-banner" hidden>
-  <label for="byok-key-input">Your OpenAI API key</label>
-  <input id="byok-key-input" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false" />
-  <button id="byok-save" class="btn-chip" type="button">Use this key</button>
-  <button id="byok-clear" class="btn-chip" type="button" hidden>Clear</button>
-  <span id="byok-status" class="muted small"></span>
-  <span class="info-icon" tabindex="0" data-tooltip="This public demo has no OpenAI key of its own — everything you can see for free (documents, chunks, the pre-built index, the code viewer, the last real evaluation run) was computed once and committed to the repo. Asking a brand-new question, rebuilding the index, or re-running the evaluation live calls the OpenAI API for real, so those need a key. It's kept only in this browser tab's sessionStorage, sent as a request header only on the request that needs it, and never logged or stored on the server. Get one at platform.openai.com/api-keys — using it here costs you fractions of a cent per question.">ⓘ</span>
-</div>
-
 <p class="lang-note">
   This is an educational demo (source on
   <a href="https://github.com/kyberis/rag-training" target="_blank" rel="noopener">GitHub</a>).
@@ -33,6 +24,145 @@
   synthetic healthcare-booking platform. That's intentional: the point is to see how the
   <em>pipeline</em> works, not to read the sample content.
 </p>
+
+<!-- ======================= LANDING SCREEN ======================= -->
+<section id="landing" class="landing">
+  <div class="landing-hero">
+    <h1>See Retrieval-Augmented Generation actually work</h1>
+    <p class="landing-sub">
+      RAG is how you make an LLM answer from <em>your own</em> documents instead of only what it
+      memorized during training: retrieve the relevant text at request time, hand it to the model
+      as context, and let it answer from that — citing its source. This page walks through a
+      real, runnable RAG pipeline end to end: every chunk, every vector, every retrieval, every
+      metric, computed live in front of you as you use it, not simulated or pre-recorded.
+    </p>
+    <button id="btn-start-demo" class="btn btn-primary btn-cta">Start the demo →</button>
+    <p id="landing-start-status" class="muted small" hidden></p>
+  </div>
+
+  <div class="landing-section">
+    <h2>How it works</h2>
+    <p class="muted small">
+      Two pipelines, run at different times. Every box below becomes a clickable, inspectable
+      step once the demo starts.
+    </p>
+
+    <p class="landing-pipeline-label">Offline — build the index once (or whenever documents change)</p>
+    <div class="pipeline landing-pipeline-preview">
+      <div class="pbox"><div class="pbox-icon">📄</div><div class="pbox-label">Documents</div></div>
+      <div class="parrow">→</div>
+      <div class="pbox"><div class="pbox-icon">✂️</div><div class="pbox-label">Chunking</div></div>
+      <div class="parrow">→</div>
+      <div class="pbox"><div class="pbox-icon">🧮</div><div class="pbox-label">Embeddings</div></div>
+      <div class="parrow">→</div>
+      <div class="pbox"><div class="pbox-icon">🗂️</div><div class="pbox-label">Vector index</div></div>
+    </div>
+
+    <p class="landing-pipeline-label">Online — every time you ask a question</p>
+    <div class="pipeline landing-pipeline-preview">
+      <div class="pbox"><div class="pbox-icon">❓</div><div class="pbox-label">Question</div></div>
+      <div class="parrow">→</div>
+      <div class="pbox"><div class="pbox-icon">🧮</div><div class="pbox-label">Embedding</div></div>
+      <div class="parrow">→</div>
+      <div class="pbox"><div class="pbox-icon">🔍</div><div class="pbox-label">Search</div></div>
+      <div class="parrow">→</div>
+      <div class="pbox"><div class="pbox-icon">🏆</div><div class="pbox-label">Top-K</div></div>
+      <div class="parrow">→</div>
+      <div class="pbox"><div class="pbox-icon">📝</div><div class="pbox-label">Prompt</div></div>
+      <div class="parrow">→</div>
+      <div class="pbox"><div class="pbox-icon">🤖</div><div class="pbox-label">LLM</div></div>
+      <div class="parrow">→</div>
+      <div class="pbox"><div class="pbox-icon">💬</div><div class="pbox-label">Answer</div></div>
+    </div>
+  </div>
+
+  <div class="landing-section">
+    <h2>What you'll explore</h2>
+    <div class="landing-topics grid-2">
+      <div class="card">
+        <h3>1. Build the Index</h3>
+        <p class="muted small">Watch documents get split into overlapping chunks and turned into
+          vectors by a real embedding model, batch by batch, in real time.</p>
+      </div>
+      <div class="card">
+        <h3>2. Ask a Question</h3>
+        <p class="muted small">Ask anything — see your question become a vector, get compared
+          against every chunk by cosine similarity, and watch the answer stream in, citing its
+          source. Includes a 2D map of where your question landed relative to every chunk.</p>
+      </div>
+      <div class="card">
+        <h3>3. Explore the Data</h3>
+        <p class="muted small">Browse the raw documents and chunks, inspect the actual stored
+          vectors, and read the real Python source that produced everything — fetched live from
+          the server, never a hand-written copy.</p>
+      </div>
+      <div class="card">
+        <h3>4. Metrics &amp; Concepts</h3>
+        <p class="muted small">Real Recall@K and Faithfulness scores (not illustrative numbers),
+          where the latency of your questions actually goes, and a glossary of the concepts this
+          demo uses — and a few it deliberately doesn't.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="landing-section">
+    <h2>Concepts you'll see in action</h2>
+    <div class="concept-list" id="landing-concept-list">
+      <div class="concept">
+        <h4>Chunking</h4>
+        <p>Documents are too long to embed or feed to an LLM whole, so they're split into
+          smaller, overlapping word windows — small enough for the embedding model, with enough
+          overlap that an answer never gets cut in half right at a chunk boundary.</p>
+      </div>
+      <div class="concept">
+        <h4>Embeddings</h4>
+        <p>A neural network turns each chunk (and later, your question) into a vector — a list of
+          numbers where texts with similar meaning end up close together in that space. That's
+          what lets search work by meaning instead of exact keywords.</p>
+      </div>
+      <div class="concept">
+        <h4>Cosine similarity &amp; top-K</h4>
+        <p>Your question's vector gets compared against every chunk's vector by the angle between
+          them (cosine similarity, -1 to 1). Only the K highest-scoring chunks are kept as
+          context — everything else is discarded, even chunks with a decent score.</p>
+      </div>
+      <div class="concept">
+        <h4>Prompt assembly</h4>
+        <p>The top-K chunks plus your question get assembled into one block of text sent to the
+          LLM, with instructions to answer only from that context and cite its source — so the
+          model can't quietly fall back on what it memorized during training.</p>
+      </div>
+      <div class="concept">
+        <h4>RAG vs fine-tuning</h4>
+        <p>Fine-tuning bakes new knowledge into the model's weights through additional training.
+          RAG keeps the model frozen and injects knowledge at request time instead — easier to
+          keep current (edit a document, rebuild the index) and every answer can cite an exact
+          source.</p>
+      </div>
+      <div class="concept">
+        <h4>Recall@K &amp; Faithfulness</h4>
+        <p>Recall@K asks whether the retriever found the right document at all. Faithfulness asks
+          whether the generated answer is actually supported by what it retrieved, or invented
+          something — graded by a second LLM call (LLM-as-a-judge).</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="landing-cta-footer">
+    <button class="btn btn-primary btn-cta" data-start-demo-link>Start the demo →</button>
+  </div>
+</section>
+
+<div id="app-shell" hidden>
+
+<div id="byok-banner" class="byok-banner" hidden>
+  <label for="byok-key-input">Your OpenAI API key</label>
+  <input id="byok-key-input" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false" />
+  <button id="byok-save" class="btn-chip" type="button">Use this key</button>
+  <button id="byok-clear" class="btn-chip" type="button" hidden>Clear</button>
+  <span id="byok-status" class="muted small"></span>
+  <span class="info-icon" tabindex="0" data-tooltip="This public demo has no OpenAI key of its own — everything you can see for free (documents, chunks, the pre-built index, the code viewer, the last real evaluation run) was computed once and committed to the repo. Asking a brand-new question, rebuilding the index, or re-running the evaluation live calls the OpenAI API for real, so those need a key. It's kept only in this browser tab's sessionStorage, sent as a request header only on the request that needs it, and never logged or stored on the server. Get one at platform.openai.com/api-keys — using it here costs you fractions of a cent per question.">ⓘ</span>
+</div>
 
 <nav class="tabs">
   <button class="tab-btn active" data-tab="init">1. Build the Index</button>
@@ -57,7 +187,13 @@
       <p>If you're running this on your own machine, the server is a single long-lived process with
         a writable disk — click "Build index" and every question you ask afterward uses the fresh
         index immediately, saved to <code>index/</code> for next time too.</p>
-      <p>The public deployment on Vercel is different: it runs as
+      <p>If you got here through the landing page's "Start the demo" button, your rebuild is
+        <strong>isolated to your own demo session</strong> — it never touches the shared index on
+        disk, and (when the public deployment has session storage configured) it's durable for 24
+        hours regardless of which serverless instance answers your next question, then it expires
+        automatically. That's a real guarantee, not best-effort.</p>
+      <p>Calling the API directly without a session (or on a deployment without session storage
+        configured) is different: the public deployment on Vercel runs as
         <span class="term-tooltip" tabindex="0" data-tooltip="A function that only exists for the duration of one request (or a short-lived warm window afterward), instead of running continuously, with a read-only filesystem except for a temporary /tmp directory. Vercel may route your next request to a different instance with completely separate memory — nothing kept only in RAM on the first one is guaranteed to be there.">serverless functions</span>
         with a read-only filesystem — so a rebuild there can't be saved to disk at all. Instead it
         stays active <strong>in memory</strong> for that one server instance: your very next
@@ -493,6 +629,8 @@
     </div>
   </section>
 </main>
+
+</div> <!-- #app-shell -->
 
 <script src="/app.js"></script>
 </body>

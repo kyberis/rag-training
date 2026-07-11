@@ -40,11 +40,12 @@ def answer(
     top_k: int | None = None,
     on_event: EventCallback | None = None,
     api_key: str | None = None,
+    session_id: str | None = None,
 ) -> dict:
     emit(on_event, "question_received", question=question, top_k=top_k or config.TOP_K)
 
     try:
-        chunks = retrieve(question, top_k=top_k, on_event=on_event, api_key=api_key)
+        chunks = retrieve(question, top_k=top_k, on_event=on_event, api_key=api_key, session_id=session_id)
 
         if not chunks:
             emit(on_event, "no_context")

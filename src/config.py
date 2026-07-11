@@ -32,3 +32,11 @@ INDEX_DIR = BASE_DIR / "index"
 INDEX_VECTORS_PATH = INDEX_DIR / "vectors.npy"
 INDEX_META_PATH = INDEX_DIR / "meta.json"
 RESULTS_SNAPSHOT_PATH = BASE_DIR / "eval" / "results_snapshot.json"
+
+# --- Sesiones de demo (ver src/session_store.py) ---
+# Si está seteada, las sesiones por-visitante (landing page -> "Start the
+# demo") se guardan en Redis con TTL nativo de 24h — correcto incluso entre
+# instancias serverless distintas en Vercel. Si no está seteada, se usa un
+# dict en memoria del proceso (alcanza para desarrollo local, un solo
+# proceso long-running).
+REDIS_URL = os.getenv("REDIS_URL") or os.getenv("KV_URL")
