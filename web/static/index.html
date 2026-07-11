@@ -54,14 +54,17 @@
 
     <details class="agent-note">
       <summary>Why might a rebuilt index disappear on the public demo?
-      <p>If you're running this on your own machine, the server is a single long-lived process —
-        click "Build index" and every question you ask afterward uses the fresh index immediately.</p>
+      <p>If you're running this on your own machine, the server is a single long-lived process with
+        a writable disk — click "Build index" and every question you ask afterward uses the fresh
+        index immediately, saved to <code>index/</code> for next time too.</p>
       <p>The public deployment on Vercel is different: it runs as
-        <span class="term-tooltip" tabindex="0" data-tooltip="A function that only exists for the duration of one request (or a short-lived warm window afterward), instead of running continuously. Vercel may route your next request to a different instance with a completely separate filesystem — nothing you wrote to disk on the first one is guaranteed to be there.">serverless functions</span>
-        with no shared disk between instances. Rebuilding there writes to that one instance's
-        temporary storage — a great way to watch the real ingestion pipeline run, but your very
-        next question might land on a different instance and not see it. That's not a bug, it's
-        what "serverless" means; it's exactly why this demo also ships a pre-built index and a
+        <span class="term-tooltip" tabindex="0" data-tooltip="A function that only exists for the duration of one request (or a short-lived warm window afterward), instead of running continuously, with a read-only filesystem except for a temporary /tmp directory. Vercel may route your next request to a different instance with completely separate memory — nothing kept only in RAM on the first one is guaranteed to be there.">serverless functions</span>
+        with a read-only filesystem — so a rebuild there can't be saved to disk at all. Instead it
+        stays active <strong>in memory</strong> for that one server instance: your very next
+        question is likely to land on the same instance and see it (Vercel tends to reuse warm
+        instances under light traffic), but that's a best-effort, not a guarantee — a follow-up
+        question could land elsewhere and see the stable pre-built index instead. That's not a bug,
+        it's what "serverless" means; it's exactly why this demo also ships a pre-built index and a
         <a href="#tab-metrics" data-tab-link="metrics">pre-computed evaluation snapshot</a> that
         work regardless of which instance answers you.</p>
     </details>

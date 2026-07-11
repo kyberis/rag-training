@@ -573,20 +573,29 @@ function startIngest() {
     }
   });
 
+  let indexPersisted = true;
+
   es.addEventListener("index_saved", (e) => {
     const payload = JSON.parse(e.data);
     appendLog("log-init", "index_saved", payload);
+    indexPersisted = payload.persisted;
     setBoxState("pipeline-init", "embeddings", "done");
     setBoxState("pipeline-init", "index", "active");
-    setBoxDetail("index", `${payload.n_vectors} × ${payload.dim}`);
-    $("#ingest-progress").textContent = "Saving index to disk…";
+    setBoxDetail("index", `${payload.n_vectors} × ${payload.dim}${payload.persisted ? "" : " (in memory only)"}`);
+    $("#ingest-progress").textContent = payload.persisted
+      ? "Saving index to disk…"
+      : "Disk is read-only here — activating the new index in memory instead…";
   });
 
   es.addEventListener("ingest_done", (e) => {
     const payload = JSON.parse(e.data);
     appendLog("log-init", "ingest_done", payload);
     setBoxState("pipeline-init", "index", "done");
-    $("#ingest-progress").textContent = `Done in ${payload.duration_ms}ms — ${payload.n_docs} docs, ${payload.n_chunks} chunks.`;
+    const persistNote = indexPersisted
+      ? ""
+      : " Not written to disk (read-only on this deployment) — active in memory for this session; your next question may or may not land on this same instance.";
+    $("#ingest-progress").textContent =
+      `Done in ${payload.duration_ms}ms — ${payload.n_docs} docs, ${payload.n_chunks} chunks.${persistNote}`;
   });
 
   es.addEventListener("ingest_error", (e) => {

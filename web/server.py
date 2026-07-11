@@ -18,11 +18,12 @@ import inspect
 import json
 import queue
 import threading
+import time
 from pathlib import Path
 from typing import Callable
 
 import numpy as np
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -30,7 +31,7 @@ from eval.evaluate import evaluate_faithfulness, evaluate_recall_at_k, load_gold
 from src import chunking, config, embeddings, rag, vector_store
 from src.ingest import build_index, load_documents
 from src.rag import answer
-from src.retriever import reset_store, similarity_from_indexed_chunk
+from src.retriever import set_store, similarity_from_indexed_chunk
 
 app = FastAPI(title="RAG demo — pipeline en vivo")
 
@@ -82,9 +83,83 @@ def _resolve_api_key(x_openai_key: str | None) -> str | None:
     Falls back to the server's own key (config.OPENAI_API_KEY) when set,
     which is what keeps local dev / self-hosting frictionless: no key field
     shows up in the UI at all when the server already has one (see
-    /api/status's has_api_key).
+    /api/status's has_api_key). On the public deployment this fallback is
+    real (see README, section "Demo pública en Vercel") — that's exactly why
+    every caller of this function also calls _check_rate_limit() first when
+    no BYOK key was supplied, so the server's own key can't be drained by
+    anonymous traffic.
     """
     return x_openai_key or config.OPENAI_API_KEY
+
+
+# --- Rate limiting: only applies when a request falls back to the server's
+# own key (config.OPENAI_API_KEY). A visitor who brings their own key spends
+# their own money, so they're never limited here.
+#
+# This is in-memory, per-process state — best-effort, not a hard guarantee.
+# Vercel's serverless instances don't share memory, and this resets on every
+# cold start, so a determined abuser spread across many instances could
+# still exceed these numbers. It bounds the *typical* worst case cheaply,
+# without adding an external database/Redis dependency for a small
+# educational demo. The real backstop is a hard spending limit set directly
+# on the OpenAI account (platform.openai.com/settings/organization/limits).
+_rate_limit_lock = threading.Lock()
+_ip_hits: dict[str, list[float]] = {}
+_eval_ip_hits: dict[str, list[float]] = {}
+_global_units: list[tuple[float, int]] = []
+
+_IP_HOURLY_LIMIT = 5           # free ask/ingest requests per IP per hour
+_EVAL_IP_DAILY_LIMIT = 1       # free live evaluation runs per IP per day
+_GLOBAL_DAILY_UNIT_BUDGET = 300  # shared "OpenAI call" budget per day, all visitors combined
+_ASK_UNITS = 2                  # 1 embedding call + 1 chat completion call
+_INGEST_UNITS = 1               # chunks are embedded in a single batch call
+_EVAL_UNITS = 30                # 10 embeddings + 10 answers + 10 judge calls
+
+
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _check_rate_limit(request: Request, units: int, is_eval: bool) -> str | None:
+    """Returns an error message if this request should be blocked, else None.
+    Only call this when there's no BYOK key — see _resolve_api_key above.
+    """
+    now = time.time()
+    ip = _client_ip(request)
+    with _rate_limit_lock:
+        if is_eval:
+            hits = _eval_ip_hits.setdefault(ip, [])
+            hits[:] = [t for t in hits if now - t < 86400]
+            if len(hits) >= _EVAL_IP_DAILY_LIMIT:
+                return (
+                    "Ya corriste la evaluación en vivo gratis hoy desde tu IP — los resultados "
+                    "de la última corrida real ya están arriba (snapshot committeado). Pegá tu "
+                    "propia OpenAI API key arriba para volver a correrla ahora mismo."
+                )
+        else:
+            hits = _ip_hits.setdefault(ip, [])
+            hits[:] = [t for t in hits if now - t < 3600]
+            if len(hits) >= _IP_HOURLY_LIMIT:
+                return (
+                    f"Ya usaste tus {_IP_HOURLY_LIMIT} acciones gratis de esta hora en esta demo "
+                    "pública. Pegá tu propia OpenAI API key arriba para seguir sin esperar."
+                )
+
+        _global_units[:] = [(t, u) for t, u in _global_units if now - t < 86400]
+        used = sum(u for _, u in _global_units)
+        if used + units > _GLOBAL_DAILY_UNIT_BUDGET:
+            return (
+                "Esta demo pública ya usó su presupuesto gratis compartido de hoy (entre todos "
+                "los visitantes). Pegá tu propia OpenAI API key arriba para seguir probando, o "
+                "volvé después de medianoche UTC."
+            )
+
+        hits.append(now)
+        _global_units.append((now, units))
+    return None
 
 
 def run_pipeline_as_sse(target_fn: Callable[[Callable[[str, dict], None]], dict]) -> StreamingResponse:
@@ -298,7 +373,10 @@ def eval_snapshot():
 
 
 @app.get("/api/eval/stream")
-def eval_stream(x_openai_key: str | None = Header(default=None, alias="X-OpenAI-Key")):
+def eval_stream(
+    request: Request,
+    x_openai_key: str | None = Header(default=None, alias="X-OpenAI-Key"),
+):
     """Corre Recall@K + Faithfulness (LLM-as-judge) contra el golden dataset.
 
     ~30 llamadas reales a la API de OpenAI (10 embeddings de pregunta + 10
@@ -310,6 +388,10 @@ def eval_stream(x_openai_key: str | None = Header(default=None, alias="X-OpenAI-
         return _immediate_error(
             "No hay índice construido todavía. Andá a la pestaña 'Build the Index' y construilo primero."
         )
+    if not x_openai_key:
+        limit_error = _check_rate_limit(request, units=_EVAL_UNITS, is_eval=True)
+        if limit_error:
+            return _immediate_error(limit_error)
     api_key = _resolve_api_key(x_openai_key)
     if not api_key:
         return _immediate_error(NO_KEY_MESSAGE)
@@ -324,16 +406,24 @@ def eval_stream(x_openai_key: str | None = Header(default=None, alias="X-OpenAI-
 
 
 @app.get("/api/ingest/stream")
-def ingest_stream(x_openai_key: str | None = Header(default=None, alias="X-OpenAI-Key")):
+def ingest_stream(
+    request: Request,
+    x_openai_key: str | None = Header(default=None, alias="X-OpenAI-Key"),
+):
+    if not x_openai_key:
+        limit_error = _check_rate_limit(request, units=_INGEST_UNITS, is_eval=False)
+        if limit_error:
+            return _immediate_error(limit_error)
     api_key = _resolve_api_key(x_openai_key)
     if not api_key:
         return _immediate_error(NO_KEY_MESSAGE)
 
     def target(on_event):
         store = build_index(on_event=on_event, api_key=api_key)
-        # El server vive como proceso largo: si no invalidamos el store
-        # cacheado, las próximas preguntas seguirían usando el índice viejo.
-        reset_store()
+        # Activa el store recién construido directo en memoria para esta
+        # instancia — funciona igual si el disco es de solo lectura (deploy
+        # serverless) o escribible (local): no depende de releerlo de disco.
+        set_store(store)
         return {"n_vectors": int(store.vectors.shape[0]), "dim": int(store.vectors.shape[1])}
 
     return run_pipeline_as_sse(target)
@@ -341,6 +431,7 @@ def ingest_stream(x_openai_key: str | None = Header(default=None, alias="X-OpenA
 
 @app.get("/api/ask/stream")
 def ask_stream(
+    request: Request,
     question: str,
     top_k: int | None = None,
     x_openai_key: str | None = Header(default=None, alias="X-OpenAI-Key"),
@@ -349,6 +440,10 @@ def ask_stream(
         return _immediate_error(
             "No hay índice construido todavía. Andá a la pestaña 'Inicialización' y construilo primero."
         )
+    if not x_openai_key:
+        limit_error = _check_rate_limit(request, units=_ASK_UNITS, is_eval=False)
+        if limit_error:
+            return _immediate_error(limit_error)
     api_key = _resolve_api_key(x_openai_key)
     if not api_key:
         return _immediate_error(NO_KEY_MESSAGE)

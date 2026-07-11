@@ -47,6 +47,19 @@ def reset_store() -> None:
     _pca_basis = None
 
 
+def set_store(store: SimpleVectorStore) -> None:
+    """Pone en memoria un store ya construido, sin pasar por disco.
+
+    En un filesystem de solo lectura (la demo pública en Vercel) guardar el
+    índice en disco puede fallar — pero el objeto SimpleVectorStore recién
+    construido igual existe en memoria. Esto lo activa para esta misma
+    instancia del servidor sin necesitar releerlo de ningún lado.
+    """
+    global _store, _pca_basis
+    _store = store
+    _pca_basis = None
+
+
 def _get_pca_basis(store: SimpleVectorStore) -> dict:
     """Fits (and caches) a 2-component PCA basis on the store's vectors.
 

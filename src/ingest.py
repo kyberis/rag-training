@@ -88,16 +88,35 @@ def build_index(on_event: EventCallback | None = None, api_key: str | None = Non
                 elapsed_ms=int((time.time() - t0) * 1000),
             )
 
-        store.save(config.INDEX_VECTORS_PATH, config.INDEX_META_PATH)
-        print(f"Índice guardado en {config.INDEX_DIR}/")
-        emit(
-            on_event,
-            "index_saved",
-            vectors_path=str(config.INDEX_VECTORS_PATH),
-            meta_path=str(config.INDEX_META_PATH),
-            n_vectors=store.vectors.shape[0],
-            dim=store.vectors.shape[1],
-        )
+        try:
+            store.save(config.INDEX_VECTORS_PATH, config.INDEX_META_PATH)
+            print(f"Índice guardado en {config.INDEX_DIR}/")
+            emit(
+                on_event,
+                "index_saved",
+                vectors_path=str(config.INDEX_VECTORS_PATH),
+                meta_path=str(config.INDEX_META_PATH),
+                n_vectors=store.vectors.shape[0],
+                dim=store.vectors.shape[1],
+                persisted=True,
+            )
+        except OSError as e:
+            # Read-only filesystem (the public Vercel deployment): the index
+            # still exists in memory and works for this pipeline run and this
+            # server instance — it just can't be written to disk here. See
+            # retriever.set_store(), which is what the web server uses to
+            # activate it without going through disk at all.
+            print(f"No se pudo guardar el índice en disco ({e}); sigue disponible en memoria.")
+            emit(
+                on_event,
+                "index_saved",
+                vectors_path=None,
+                meta_path=None,
+                n_vectors=store.vectors.shape[0],
+                dim=store.vectors.shape[1],
+                persisted=False,
+                note="Filesystem de solo lectura (deploy serverless) — el índice quedó activo en memoria para esta instancia, pero no en disco.",
+            )
         emit(
             on_event,
             "ingest_done",
