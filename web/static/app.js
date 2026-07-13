@@ -755,7 +755,7 @@ async function rerootVectorMap(source, chunkIndex) {
     // No topKSources here on purpose: "top-K used as context" isn't a
     // meaningful concept for an arbitrary chunk-to-chunk similarity view,
     // so renderVectorMap skips the lines/highlighting entirely.
-    renderVectorMap($("#vector-map"), data.all_scores, [], { x: self.x, y: self.y }, label);
+    renderVectorMap($("#vector-map"), data.all_scores, [], { x: self.x, y: self.y, z: self.z }, label);
     refLabelEl.textContent = `Showing neighbors of: ${label}`;
     $("#vector-map-reset-ref").hidden = false;
   } catch (err) {
@@ -771,177 +771,23 @@ $("#vector-map-reset-ref").addEventListener("click", () => {
   $("#vector-map-reset-ref").hidden = true;
 });
 
-// Pan/zoom window into the map's fixed 560×340 coordinate space. Persists
-// across re-renders that keep the same question (reroot / back-to-question)
-// so panning/zooming isn't lost when the reference point changes; only a
-// fresh question or the explicit "Reset view" button snaps it back.
-const VECTOR_MAP_W = 560, VECTOR_MAP_H = 340;
-let vectorMapView = { x: 0, y: 0, w: VECTOR_MAP_W, h: VECTOR_MAP_H };
+$("#vector-map-reset-view").addEventListener("click", () => {
+  if (window.VectorMap3D) window.VectorMap3D.resetView();
+});
 
-function resetVectorMapView() {
-  vectorMapView = { x: 0, y: 0, w: VECTOR_MAP_W, h: VECTOR_MAP_H };
-  const svg = document.querySelector("#vector-map .vector-map-svg");
-  if (svg) svg.setAttribute("viewBox", `${vectorMapView.x} ${vectorMapView.y} ${vectorMapView.w} ${vectorMapView.h}`);
-}
-
-$("#vector-map-reset-view").addEventListener("click", resetVectorMapView);
-
-// Drag-to-pan and wheel/pinch-to-zoom over the map's viewBox. Dot/query
-// clicks are excluded from starting a drag (checked by the caller via
-// e.target's class) so re-centering still works with a single click.
-function attachVectorMapPanZoom(svg) {
-  let dragging = false;
-  let lastClientX = 0, lastClientY = 0;
-
-  svg.addEventListener("pointerdown", (e) => {
-    if (e.target.closest(".vector-dot, .vector-query")) return;
-    dragging = true;
-    lastClientX = e.clientX;
-    lastClientY = e.clientY;
-    svg.classList.add("grabbing");
-    svg.setPointerCapture(e.pointerId);
-  });
-
-  svg.addEventListener("pointermove", (e) => {
-    if (!dragging) return;
-    const rect = svg.getBoundingClientRect();
-    vectorMapView.x -= (e.clientX - lastClientX) * (vectorMapView.w / rect.width);
-    vectorMapView.y -= (e.clientY - lastClientY) * (vectorMapView.h / rect.height);
-    lastClientX = e.clientX;
-    lastClientY = e.clientY;
-    svg.setAttribute("viewBox", `${vectorMapView.x} ${vectorMapView.y} ${vectorMapView.w} ${vectorMapView.h}`);
-  });
-
-  const endDrag = (e) => {
-    dragging = false;
-    svg.classList.remove("grabbing");
-    if (e && svg.hasPointerCapture(e.pointerId)) svg.releasePointerCapture(e.pointerId);
-  };
-  svg.addEventListener("pointerup", endDrag);
-  svg.addEventListener("pointercancel", endDrag);
-
-  svg.addEventListener("wheel", (e) => {
-    e.preventDefault();
-    const rect = svg.getBoundingClientRect();
-    const nx = (e.clientX - rect.left) / rect.width;
-    const ny = (e.clientY - rect.top) / rect.height;
-    const worldX = vectorMapView.x + nx * vectorMapView.w;
-    const worldY = vectorMapView.y + ny * vectorMapView.h;
-
-    const factor = e.deltaY > 0 ? 1.1 : 0.9;
-    const minW = VECTOR_MAP_W * 0.1, maxW = VECTOR_MAP_W * 1.5;
-    const newW = Math.min(maxW, Math.max(minW, vectorMapView.w * factor));
-    const newH = newW * (VECTOR_MAP_H / VECTOR_MAP_W);
-
-    vectorMapView.x = worldX - nx * newW;
-    vectorMapView.y = worldY - ny * newH;
-    vectorMapView.w = newW;
-    vectorMapView.h = newH;
-    svg.setAttribute("viewBox", `${vectorMapView.x} ${vectorMapView.y} ${vectorMapView.w} ${vectorMapView.h}`);
-  }, { passive: false });
-}
-
-// 2D scatter of every chunk's PCA-projected vector plus a reference point
-// (your question, or — after clicking a dot — an indexed chunk's own
-// vector), in the same projected space computed server-side in
-// retriever.py, so the frontend never touches raw 1536-dim numbers. Reuses
-// the same "which rows are really top-K" trick as renderScoreBars: allScores
-// is sorted by score, so the first N whose source appears in topKSources are
-// the real top-K. Pass an empty topKSources to skip the top-K
-// lines/highlighting entirely — that's what chunk-to-chunk reroot mode does,
-// since "top-K actually used as context" isn't a meaningful concept there.
+// Thin adapter over the 3D renderer in vector-map-3d.js (Three.js — this
+// project's one frontend dependency, vendored locally, loaded as a
+// separate <script type="module">). Kept under the same name/signature
+// the rest of this file already calls (reroot, "back to your question",
+// the live search_done handler), so none of those call sites needed to
+// change — only this function's body did, when the map moved from a
+// hand-rolled SVG scatter to a real 3D scene.
 function renderVectorMap(container, allScores, topKSources, referencePoint, referenceLabel) {
-  container.innerHTML = "";
-  if (!allScores.length) {
-    const msg = document.createElement("p");
-    msg.className = "muted";
-    msg.textContent = "No chunks to show yet.";
-    container.appendChild(msg);
+  if (!window.VectorMap3D) {
+    container.innerHTML = '<p class="muted">3D map unavailable.</p>';
     return;
   }
-
-  const xs = allScores.map((s) => s.x).concat([referencePoint.x]);
-  const ys = allScores.map((s) => s.y).concat([referencePoint.y]);
-  const minX = Math.min(...xs), maxX = Math.max(...xs);
-  const minY = Math.min(...ys), maxY = Math.max(...ys);
-  const padX = (maxX - minX || 1) * 0.15;
-  const padY = (maxY - minY || 1) * 0.15;
-  const rangeX = (maxX - minX) + padX * 2 || 1;
-  const rangeY = (maxY - minY) + padY * 2 || 1;
-
-  const W = VECTOR_MAP_W, H = VECTOR_MAP_H;
-  const toPx = (x, y) => [
-    ((x - minX + padX) / rangeX) * W,
-    H - ((y - minY + padY) / rangeY) * H, // flip Y so it doesn't read upside down
-  ];
-
-  const topKSet = new Set();
-  const remaining = new Map();
-  topKSources.forEach((src) => remaining.set(src, (remaining.get(src) || 0) + 1));
-  allScores.forEach((s) => {
-    const left = remaining.get(s.source) || 0;
-    if (left > 0) {
-      topKSet.add(`${s.source}#${s.chunk_index}`);
-      remaining.set(s.source, left - 1);
-    }
-  });
-
-  const svgNS = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(svgNS, "svg");
-  svg.setAttribute("viewBox", `${vectorMapView.x} ${vectorMapView.y} ${vectorMapView.w} ${vectorMapView.h}`);
-  svg.setAttribute("class", "vector-map-svg");
-
-  const [qx, qy] = toPx(referencePoint.x, referencePoint.y);
-
-  // Lines first, so the dots render on top of them.
-  allScores.forEach((s) => {
-    if (!topKSet.has(`${s.source}#${s.chunk_index}`)) return;
-    const [px, py] = toPx(s.x, s.y);
-    const line = document.createElementNS(svgNS, "line");
-    line.setAttribute("x1", qx);
-    line.setAttribute("y1", qy);
-    line.setAttribute("x2", px);
-    line.setAttribute("y2", py);
-    line.setAttribute("class", "vector-link");
-    svg.appendChild(line);
-  });
-
-  allScores.forEach((s) => {
-    const isTopK = topKSet.has(`${s.source}#${s.chunk_index}`);
-    const [px, py] = toPx(s.x, s.y);
-    const circle = document.createElementNS(svgNS, "circle");
-    circle.setAttribute("cx", px);
-    circle.setAttribute("cy", py);
-    circle.setAttribute("r", isTopK ? 6 : 3.5);
-    circle.setAttribute("class", "vector-dot" + (isTopK ? " topk" : ""));
-    const title = document.createElementNS(svgNS, "title");
-    title.textContent = `${s.source} #${s.chunk_index} — score ${s.score.toFixed(3)} (click to re-center here)`;
-    circle.appendChild(title);
-    circle.addEventListener("click", () => rerootVectorMap(s.source, s.chunk_index));
-    svg.appendChild(circle);
-  });
-
-  const query = document.createElementNS(svgNS, "circle");
-  query.setAttribute("cx", qx);
-  query.setAttribute("cy", qy);
-  query.setAttribute("r", 7);
-  query.setAttribute("class", "vector-query");
-  const qTitle = document.createElementNS(svgNS, "title");
-  qTitle.textContent = referenceLabel;
-  query.appendChild(qTitle);
-  svg.appendChild(query);
-
-  container.appendChild(svg);
-  attachVectorMapPanZoom(svg);
-
-  const legend = document.createElement("div");
-  legend.className = "vector-map-legend";
-  legend.innerHTML = `
-    <span><span class="legend-swatch legend-query"></span>reference point</span>
-    <span><span class="legend-swatch legend-topk"></span>top-K (used as context)</span>
-    <span><span class="legend-swatch legend-dot"></span>other chunks</span>
-  `;
-  container.appendChild(legend);
+  window.VectorMap3D.render(container, allScores, topKSources, referencePoint, referenceLabel, rerootVectorMap);
 }
 
 function askQuestionClassic(question) {
@@ -1005,7 +851,6 @@ function askQuestionClassic(question) {
       topKSources: payload.top_k_sources,
       referencePoint: payload.query_projection,
     };
-    vectorMapView = { x: 0, y: 0, w: VECTOR_MAP_W, h: VECTOR_MAP_H }; // fresh question: forget any old pan/zoom
     renderVectorMap($("#vector-map"), payload.all_scores, payload.top_k_sources, payload.query_projection, "Your question");
     $("#vector-map-ref-label").textContent = "";
     $("#vector-map-reset-ref").hidden = true;
@@ -1867,10 +1712,7 @@ async function startDemoSession() {
     }
     setSessionId(sessionId);
     showAppShell();
-    // "Ask a Question" first, not "Build the Index": /api/session/start
-    // already seeded a working index, so the demo is immediately usable —
-    // sending the visitor to rebuild something first would contradict that.
-    switchToTab("ask");
+    switchToTab("init"); // start at step 1, same as a fresh page load — the index is already seeded, so there's nothing to build first, but the tour still starts from the top
     checkStatus();
   } catch (err) {
     statusEl.textContent = "Could not reach the server. Try again.";

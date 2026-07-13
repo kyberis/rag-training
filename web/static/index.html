@@ -395,15 +395,16 @@
 
         <div class="card">
           <h3>Vector map — where your question landed
-            <span class="info-icon" tabindex="0" data-tooltip="Every chunk's real 1536-dimension vector is compressed down to 2 dimensions with PCA (principal component analysis) just so it can be drawn on a flat plane. Distances here are a rough approximation of the real embedding space — useful for intuition, not the literal geometry the model uses.">ⓘ</span>
+            <span class="info-icon" tabindex="0" data-tooltip="Every chunk's real 1536-dimension vector is compressed down to 3 dimensions with PCA (principal component analysis) so it can be rendered in 3D. Distances here are a rough approximation of the real embedding space — useful for intuition, not the literal geometry the model uses. The exact number (real cosine similarity, no projection loss) is always shown when you hover or tap a point.">ⓘ</span>
           </h3>
           <p class="muted small">
-            Every dot is a chunk in the index, projected into the same 2D space as your question
-            (the ⭐). The dashed lines connect it to the real top-K chunks — the ones actually used
-            as context — highlighted in blue. Click any dot to make <em>it</em> the reference point
-            and see its real cosine distance to every other chunk (a fresh search, from that
-            chunk's own stored vector — no extra OpenAI call needed); hover any dot for the exact
-            number. Drag to pan, scroll/pinch to zoom.
+            Every sphere is a chunk in the index, positioned in the same 3D space as your question
+            (the gold sphere). The dashed lines connect it to the real top-K chunks — the ones
+            actually used as context — highlighted in blue. Hover any sphere for its exact
+            similarity (tap on touch devices, then use the button to make it the new reference
+            point — a fresh search from that chunk's own stored vector, no extra OpenAI call
+            needed). Drag to rotate, scroll or pinch to zoom, right-click-drag or two-finger-drag
+            to pan.
           </p>
           <div class="vector-map-toolbar">
             <button id="vector-map-reset-view" class="btn-chip" type="button">Reset view</button>
@@ -412,6 +413,11 @@
           </div>
           <div id="vector-map" class="vector-map">
             <p class="muted">The map will appear here once a search runs.</p>
+          </div>
+          <div class="vector-map-legend">
+            <span><span class="legend-swatch legend-query"></span>reference point</span>
+            <span><span class="legend-swatch legend-topk"></span>top-K (used as context)</span>
+            <span><span class="legend-swatch legend-dot"></span>other chunks</span>
           </div>
         </div>
 
@@ -693,5 +699,14 @@
 </div> <!-- #app-shell -->
 
 <script src="/app.js"></script>
+
+<!-- 3D vector map — this project's one and only frontend dependency,
+     vendored locally (no CDN at runtime, no build step). The import map
+     must precede the module script below; order relative to the classic
+     app.js script above doesn't matter. -->
+<script type="importmap">
+{ "imports": { "three": "/vendor/three/three.module.js" } }
+</script>
+<script type="module" src="/vector-map-3d.js"></script>
 </body>
 </html>

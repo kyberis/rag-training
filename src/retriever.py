@@ -18,10 +18,10 @@ from .vector_store import SimpleVectorStore
 
 _store: SimpleVectorStore | None = None
 
-# Base PCA (mean + top-2 components) fit on the currently loaded store's
-# vectors, used to project the 1536-dim vectors down to 2D for the "vector
+# Base PCA (mean + top-3 components) fit on the currently loaded store's
+# vectors, used to project the 1536-dim vectors down to 3D for the "vector
 # map" visualization. Cached per store so repeated questions land in the
-# same 2D space instead of jittering around on every search.
+# same 3D space instead of jittering around on every search.
 _pca_basis: dict | None = None
 
 # In-process hot cache for session-scoped stores: session_id -> {"store",
@@ -130,19 +130,29 @@ def set_store(store: SimpleVectorStore, session_id: str | None = None) -> None:
     _cache_put(session_id, {"store": store, "pca_basis": None})
 
 
+_PCA_COMPONENTS = 3  # 3D vector map — see web/static/vector-map-3d.js
+
+
 def _fit_pca(store: SimpleVectorStore) -> dict:
     """Plain numpy SVD, no sklearn dependency: centering the vectors and
-    taking the top-2 right singular vectors gives the same 2 principal
+    taking the top-3 right singular vectors gives the same 3 principal
     components, which is all the "vector map" visualization needs.
     """
     vectors = store.vectors.astype(np.float64)
     mean = vectors.mean(axis=0)
     _, _, vt = np.linalg.svd(vectors - mean, full_matrices=False)
-    return {"mean": mean, "components": vt[:2]}
+    components = vt[:_PCA_COMPONENTS]
+    if components.shape[0] < _PCA_COMPONENTS:
+        # Un store con menos chunks que componentes pedidos (SVD no puede dar
+        # más filas que min(n_chunks, dim)) — pad con ceros así el resto del
+        # código siempre puede asumir 3 componentes, sin casos especiales.
+        pad = np.zeros((_PCA_COMPONENTS - components.shape[0], components.shape[1]))
+        components = np.vstack([components, pad])
+    return {"mean": mean, "components": components}
 
 
 def _get_pca_basis(store: SimpleVectorStore, session_id: str | None = None) -> dict:
-    """Fits (and caches) a 2-component PCA basis on the store's vectors.
+    """Fits (and caches) a 3-component PCA basis on the store's vectors.
 
     Session-scoped when session_id is given — otherwise one visitor's
     projection could leak into another's "vector map".
@@ -163,21 +173,21 @@ def _get_pca_basis(store: SimpleVectorStore, session_id: str | None = None) -> d
     return entry["pca_basis"]
 
 
-def _project(basis: dict, vector) -> tuple[float, float]:
-    xy = (np.array(vector, dtype=np.float64) - basis["mean"]) @ basis["components"].T
-    return float(xy[0]), float(xy[1])
+def _project(basis: dict, vector) -> tuple[float, float, float]:
+    xyz = (np.array(vector, dtype=np.float64) - basis["mean"]) @ basis["components"].T
+    return float(xyz[0]), float(xyz[1]), float(xyz[2])
 
 
-def _xy_by_key(basis: dict, store: SimpleVectorStore) -> dict[tuple[str, int], tuple[float, float]]:
+def _xy_by_key(basis: dict, store: SimpleVectorStore) -> dict[tuple[str, int], tuple[float, float, float]]:
     projected = (store.vectors.astype(np.float64) - basis["mean"]) @ basis["components"].T
     return {
-        (m["source"], m["chunk_index"]): (float(projected[i, 0]), float(projected[i, 1]))
+        (m["source"], m["chunk_index"]): (float(projected[i, 0]), float(projected[i, 1]), float(projected[i, 2]))
         for i, m in enumerate(store.metadata)
     }
 
 
-def _annotate_with_projection(results: list[dict], xy_by_key: dict) -> list[dict]:
-    """Attaches each result's 2D PCA position — the shape the vector-map
+def _annotate_with_projection(results: list[dict], xyz_by_key: dict) -> list[dict]:
+    """Attaches each result's 3D PCA position — the shape the vector-map
     frontend needs, whether `results` came from a fresh query embedding or
     from an already-indexed chunk's own stored vector.
     """
@@ -187,8 +197,9 @@ def _annotate_with_projection(results: list[dict], xy_by_key: dict) -> list[dict
             "chunk_index": r["chunk_index"],
             "score": r["score"],
             "text_preview": r["text"][:160],
-            "x": xy_by_key[(r["source"], r["chunk_index"])][0],
-            "y": xy_by_key[(r["source"], r["chunk_index"])][1],
+            "x": xyz_by_key[(r["source"], r["chunk_index"])][0],
+            "y": xyz_by_key[(r["source"], r["chunk_index"])][1],
+            "z": xyz_by_key[(r["source"], r["chunk_index"])][2],
         }
         for r in results
     ]
@@ -219,14 +230,14 @@ def retrieve(
     all_results = store.search(query_vector, top_k=len(store.metadata))
     top_results = all_results[:top_k]
     basis = _get_pca_basis(store, session_id)
-    query_x, query_y = _project(basis, query_vector)
+    query_x, query_y, query_z = _project(basis, query_vector)
 
     emit(
         on_event,
         "search_done",
         all_scores=_annotate_with_projection(all_results, _xy_by_key(basis, store)),
         top_k_sources=[r["source"] for r in top_results],
-        query_projection={"x": query_x, "y": query_y},
+        query_projection={"x": query_x, "y": query_y, "z": query_z},
     )
     return top_results
 
