@@ -1,16 +1,16 @@
 """
-Server web para la UI que muestra el pipeline RAG en tiempo real.
+Web server for the UI that shows the RAG pipeline in real time.
 
-Este módulo es la única parte del proyecto que sabe de FastAPI/SSE — todo
-lo que hace es llamar a las funciones de src/ (que ya emiten eventos de
-progreso vía el parámetro on_event) y traducir esos eventos a
-Server-Sent Events para que el frontend estático los consuma.
+This module is the only part of the project that knows about
+FastAPI/SSE — all it does is call the functions in src/ (which already
+emit progress events via the on_event parameter) and translate those
+events into Server-Sent Events for the static frontend to consume.
 
-Correr con:
+Run with:
     python -m web.server
-    (o) uvicorn web.server:app --reload
+    (or) uvicorn web.server:app --reload
 
-Después abrir http://127.0.0.1:8000 en el navegador.
+Then open http://127.0.0.1:8000 in your browser.
 """
 from __future__ import annotations
 
@@ -39,11 +39,10 @@ app = FastAPI(title="RAG demo — pipeline en vivo")
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
-# Whitelist de funciones que se pueden mostrar en el visor de código de la
-# pestaña Explore. Nunca se evalúa un path arbitrario mandado por el
-# cliente — solo se permite pedir una de estas claves fijas, y se lee el
-# código fuente real con inspect.getsource() para garantizar que lo que se
-# muestra es exactamente lo que corrió.
+# Whitelist of functions that can be shown in the Explore tab's code
+# viewer. An arbitrary path sent by the client is never evaluated — only
+# one of these fixed keys can be requested, and the real source is read
+# with inspect.getsource() to guarantee what's shown is exactly what ran.
 CODE_REGISTRY: dict[str, list] = {
     "chunking": [chunking.chunk_spans, chunking.chunk_text],
     "embeddings": [embeddings.embed_texts, embeddings.embed_query],
@@ -199,13 +198,13 @@ def _has_usable_index(session_id: str | None) -> bool:
 
 
 def run_pipeline_as_sse(target_fn: Callable[[Callable[[str, dict], None]], dict]) -> StreamingResponse:
-    """Corre target_fn(on_event) en un thread aparte y transmite cada evento
-    que emita como SSE, terminando siempre con pipeline_done o pipeline_error.
+    """Runs target_fn(on_event) in a separate thread and streams every event
+    it emits as SSE, always ending with pipeline_done or pipeline_error.
 
-    target_fn hace llamadas bloqueantes (a la API de OpenAI), por eso corre
-    en un thread propio en vez de directamente en el handler async — así no
-    bloquea el event loop de uvicorn mientras dura la ingestión o la
-    generación de la respuesta.
+    target_fn makes blocking calls (to the OpenAI API), which is why it
+    runs in its own thread instead of directly in the async handler — that
+    way it doesn't block uvicorn's event loop for the duration of the
+    ingestion or the answer generation.
     """
     q: queue.Queue = queue.Queue()
     sentinel = object()
@@ -270,11 +269,11 @@ def documents():
 
 @app.get("/api/kb/documents/{source}")
 def kb_document(source: str):
-    """Texto completo de un documento, para la pestaña Explore.
+    """Full text of a document, for the Explore tab.
 
-    `source` solo se usa como clave de un diccionario armado a partir de
-    los archivos reales en disco — nunca se concatena a un path, así que
-    no hay forma de pedir un archivo fuera de data/docplanner_kb/.
+    `source` is only ever used as a dict key built from the real files on
+    disk — it's never concatenated into a path, so there's no way to
+    request a file outside of data/docplanner_kb/.
     """
     docs_by_source = {d["source"]: d for d in load_documents()}
     doc = docs_by_source.get(source)
@@ -285,9 +284,9 @@ def kb_document(source: str):
 
 @app.get("/api/kb/chunks")
 def kb_chunks(source: str | None = None):
-    """Chunks de uno o todos los documentos, con su rango de palabras y
-    cuánto overlap tienen con el chunk anterior — recalculado en vivo con
-    chunking.chunk_spans(), disponible incluso antes de construir el índice.
+    """Chunks for one or all documents, with their word range and how much
+    overlap they have with the previous chunk — recomputed live with
+    chunking.chunk_spans(), available even before the index is built.
     """
     docs = load_documents()
     if source is not None:
@@ -318,9 +317,9 @@ def kb_chunks(source: str | None = None):
 
 @app.get("/api/kb/index")
 def kb_index():
-    """Resumen de lo que hay literalmente persistido en disco: el array de
-    index/vectors.npy y la lista de index/meta.json. Esto es "la base de
-    datos" del proyecto — no hay nada más detrás.
+    """Summary of what's literally persisted on disk: the array in
+    index/vectors.npy and the list in index/meta.json. This is the
+    project's "database" — there's nothing else behind it.
     """
     if not config.INDEX_VECTORS_PATH.exists():
         raise HTTPException(status_code=404, detail="Todavía no se construyó el índice.")
@@ -342,8 +341,8 @@ def kb_index():
 
 @app.get("/api/kb/vector")
 def kb_vector(source: str, chunk_index: int):
-    """El vector real guardado para un chunk puntual, leído directamente de
-    index/vectors.npy — no una aproximación ni un recálculo.
+    """The real stored vector for one specific chunk, read directly from
+    index/vectors.npy — not an approximation or a recomputation.
     """
     if not config.INDEX_VECTORS_PATH.exists():
         raise HTTPException(status_code=404, detail="Todavía no se construyó el índice.")
@@ -388,9 +387,9 @@ def kb_similarity(
 
 @app.get("/api/code")
 def get_code(key: str):
-    """Código fuente real de una de las funciones del pipeline, vía
-    inspect.getsource(). `key` solo puede ser una de las claves fijas de
-    CODE_REGISTRY — nunca se evalúa un nombre de función arbitrario.
+    """Real source code for one of the pipeline's functions, via
+    inspect.getsource(). `key` can only be one of CODE_REGISTRY's fixed
+    keys — an arbitrary function name is never evaluated.
     """
     funcs = CODE_REGISTRY.get(key)
     if not funcs:
@@ -411,11 +410,11 @@ def eval_golden():
 
 @app.get("/api/eval/snapshot")
 def eval_snapshot():
-    """Resultados reales de Recall@K + Faithfulness, calculados una vez por
-    el mantenedor del proyecto y committeados al repo — así cualquiera que
-    abra la demo pública ve números reales (no inventados) sin gastar un
-    solo llamado a OpenAI. 'Run evaluation' abajo repite lo mismo en vivo,
-    para quien traiga su propia API key.
+    """Real Recall@K + Faithfulness results, computed once by the project
+    maintainer and committed to the repo — so anyone opening the public
+    demo sees real numbers (not made up) without spending a single OpenAI
+    call. 'Run evaluation' below repeats the same thing live, for whoever
+    brings their own API key.
     """
     if not config.RESULTS_SNAPSHOT_PATH.exists():
         raise HTTPException(status_code=404, detail="Todavía no se generó el snapshot de evaluación.")
@@ -429,16 +428,16 @@ def eval_stream(
     x_openai_key: str | None = Header(default=None, alias="X-OpenAI-Key"),
     x_session_id: str | None = Header(default=None, alias="X-Session-Id"),
 ):
-    """Corre Recall@K + Faithfulness (LLM-as-judge) contra el golden dataset.
+    """Runs Recall@K + Faithfulness (LLM-as-judge) against the golden dataset.
 
-    ~30 llamadas reales a la API de OpenAI (10 embeddings de pregunta + 10
-    respuestas + 10 juicios), toma cerca de un minuto — el frontend avisa
-    el costo/tiempo antes de este botón. Los resultados ya calculados están
-    en /api/eval/snapshot si no querés gastar tu propia clave.
+    ~30 real calls to the OpenAI API (10 question embeddings + 10 answers +
+    10 judgments), takes close to a minute — the frontend warns about the
+    cost/time before this button. The already-computed results are in
+    /api/eval/snapshot if you don't want to spend your own key.
 
-    Si hay una sesión de demo activa (X-Session-Id), evalúa contra el índice
-    propio de esa sesión en vez del compartido — así los números reflejan
-    lo que ese visitante efectivamente construyó.
+    If there's an active demo session (X-Session-Id), evaluates against
+    that session's own index instead of the shared one — so the numbers
+    reflect what that visitor actually built.
     """
     if not _has_usable_index(x_session_id):
         return _immediate_error(
@@ -476,13 +475,13 @@ def ingest_stream(
         return _immediate_error(NO_KEY_MESSAGE)
 
     def target(on_event):
-        # Con sesión activa, la reconstrucción nunca se guarda en el índice
-        # compartido de disco (persist=False) — queda aislada a esa sesión.
+        # With an active session, the rebuild is never saved to the shared
+        # index on disk (persist=False) — it stays isolated to that session.
         store = build_index(on_event=on_event, api_key=api_key, persist=(x_session_id is None))
-        # Activa el store recién construido directo en memoria (global) o en
-        # la sesión (Redis/memoria) — funciona igual si el disco es de solo
-        # lectura (deploy serverless) o escribible (local): no depende de
-        # releerlo de disco.
+        # Activates the freshly built store directly in memory (global) or
+        # in the session (Redis/memory) — works the same whether the disk
+        # is read-only (serverless deploy) or writable (local): it doesn't
+        # depend on rereading it from disk.
         set_store(store, session_id=x_session_id)
         return {"n_vectors": int(store.vectors.shape[0]), "dim": int(store.vectors.shape[1])}
 
@@ -494,11 +493,11 @@ def session_start(
     request: Request,
     x_session_id: str | None = Header(default=None, alias="X-Session-Id"),
 ):
-    """Siembra una sesión de demo nueva con una copia del índice compartido,
-    así el CTA de la pantalla de aterrizaje entrega una experiencia "ya
-    construida" sin forzar una reconstrucción primero. La sesión queda
-    aislada del índice global y de cualquier otra sesión, y expira sola a
-    las 24h (ver session_store.py).
+    """Seeds a new demo session with a copy of the shared index, so the
+    landing screen's CTA delivers an "already built" experience without
+    forcing a rebuild first. The session stays isolated from the global
+    index and from any other session, and expires on its own after 24h
+    (see session_store.py).
     """
     if not x_session_id:
         raise HTTPException(status_code=400, detail="Falta el header X-Session-Id.")
@@ -556,12 +555,12 @@ def ask_agentic_stream(
     x_openai_key: str | None = Header(default=None, alias="X-OpenAI-Key"),
     x_session_id: str | None = Header(default=None, alias="X-Session-Id"),
 ):
-    """Misma pregunta que /api/ask/stream, pero con el modelo decidiendo vía
-    tool calling si llama a retrieve_context cero, una, o varias veces antes
-    de responder (ReAct) — ver src/agentic_rag.py. Mismas guardas que el
-    modo clásico, pero con su propio peso de rate limit: hasta 4 vueltas del
-    loop, cada una con su propia llamada al modelo y (si pide la
-    herramienta) su propia llamada de embeddings.
+    """Same question as /api/ask/stream, but with the model deciding via
+    tool calling whether to call retrieve_context zero, one, or several
+    times before answering (ReAct) — see src/agentic_rag.py. Same guards
+    as classic mode, but with its own rate-limit weight: up to 4 loop
+    turns, each with its own model call and (if it requests the tool) its
+    own embedding call.
     """
     if not _has_usable_index(x_session_id):
         return _immediate_error(
@@ -581,8 +580,8 @@ def ask_agentic_stream(
     return run_pipeline_as_sse(target)
 
 
-# Estáticos al final: Starlette resuelve rutas en el orden en que se
-# registran, así que si el mount de "/" fuera antes se comería /api/*.
+# Static files last: Starlette resolves routes in registration order, so
+# if the "/" mount came earlier it would swallow /api/*.
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
 
 

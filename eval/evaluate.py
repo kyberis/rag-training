@@ -1,20 +1,20 @@
 """
-Evaluación del sistema RAG contra un golden dataset (ver punto 5 del framework).
+Evaluates the RAG system against a golden dataset (see framework point 5).
 
-Corré:
+Run:
     python -m eval.evaluate
 
-Calcula dos métricas, las mismas que ya vimos en la teoría:
+Computes two metrics, the same ones already covered in the theory:
 
-1. Recall@K (punto 1): ¿el documento fuente esperado aparece entre los
-   top-K chunks que devolvió el retriever para esa pregunta?
+1. Recall@K (point 1): does the expected source document show up among
+   the top-K chunks the retriever returned for that question?
 
-2. Faithfulness (punto 2), medido con LLM-as-a-judge (punto 4): ¿la
-   respuesta generada por el RAG está respaldada por el contexto que
-   recuperó, o inventó algo que no estaba ahí?
+2. Faithfulness (point 2), measured with LLM-as-a-judge (point 4): is the
+   answer the RAG generated backed by the context it retrieved, or did it
+   invent something that wasn't there?
 
-Requiere OPENAI_API_KEY configurada (ver README.md) y el índice ya
-construido (python -m src.ingest).
+Requires OPENAI_API_KEY configured (see README.md) and the index already
+built (python -m src.ingest).
 """
 from __future__ import annotations
 

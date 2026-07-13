@@ -1,15 +1,15 @@
 """
-Pipeline de ingestión (offline / batch).
+Ingestion pipeline (offline / batch).
 
-Corré esto cada vez que agregás o cambiás documentos en data/docplanner_kb/:
+Run this every time you add or change documents in data/docplanner_kb/:
 
     python -m src.ingest
 
-Qué hace, paso a paso (ver README.md para el detalle completo):
-1. Lee todos los .md de data/docplanner_kb/
-2. Corta cada documento en chunks con overlap (chunking.py)
-3. Embebe cada chunk con la API de OpenAI (embeddings.py)
-4. Guarda los vectores + su metadata en index/ (vector_store.py)
+What it does, step by step (see README.md for the full detail):
+1. Reads every .md file in data/docplanner_kb/
+2. Splits each document into overlapping chunks (chunking.py)
+3. Embeds each chunk with the OpenAI API (embeddings.py)
+4. Saves the vectors + their metadata in index/ (vector_store.py)
 """
 from __future__ import annotations
 
@@ -69,7 +69,7 @@ def build_index(
         print("Generando embeddings con OpenAI... (puede tardar unos segundos)")
 
         store = SimpleVectorStore()
-        batch_size = 100  # evita mandar requests gigantes si el KB crece mucho
+        batch_size = 100  # avoids sending giant requests if the KB grows a lot
         total_batches = (len(all_chunks) + batch_size - 1) // batch_size
         for batch_index, i in enumerate(range(0, len(all_chunks), batch_size)):
             batch_texts = all_chunks[i:i + batch_size]
@@ -93,11 +93,11 @@ def build_index(
             )
 
         if not persist:
-            # Reconstrucción con alcance de sesión (ver retriever.set_store()
-            # con session_id): nunca debe pisar el índice compartido en
-            # disco, ni siquiera en local donde sí sería escribible — queda
-            # aislado en la sesión de ese visitante (Redis o memoria, ver
-            # session_store.py).
+            # Session-scoped rebuild (see retriever.set_store() with
+            # session_id): must never overwrite the shared index on disk,
+            # not even locally where it would actually be writable — it
+            # stays isolated to that visitor's session (Redis or memory,
+            # see session_store.py).
             print("Índice de esta sesión — no se guarda en el índice compartido de disco.")
             emit(
                 on_event,

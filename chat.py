@@ -1,10 +1,10 @@
 """
-CLI interactivo para hablar con el asistente RAG de DocPlanner.
+Interactive CLI for talking to the DocPlanner RAG assistant.
 
-Requiere haber corrido antes:
+Requires having run first:
     python -m src.ingest
 
-Uso:
+Usage:
     python chat.py
 """
 from src.rag import answer

@@ -1,109 +1,109 @@
-# RAG de práctica — DocPlanner Support Assistant
+# RAG practice project — DocPlanner Support Assistant
 
-**Demo pública, sin instalar nada: [rag-training.vercel.app](https://rag-training.vercel.app)** — documentos, chunks, índice, código fuente y la última evaluación real son navegables gratis; para hacer una pregunta nueva en vivo o reconstruir el índice necesitás pegar tu propia OpenAI API key (ver sección 2.9, "por qué" y cómo funciona).
+**Public demo, nothing to install: [rag-training.vercel.app](https://rag-training.vercel.app)** — documents, chunks, the index, the source code, and the last real evaluation run are browsable for free; to ask a brand-new question live or rebuild the index you'll need to paste your own OpenAI API key (see section 2.9, "why" and how it works).
 
-Este proyecto es un RAG (Retrieval Augmented Generation) real y ejecutable, construido como ejercicio de preparación técnica. El caso de uso es hipotético: un asistente de soporte que responde preguntas de pacientes en base a una base de conocimiento sintética inspirada en el modelo de negocio público de DocPlanner (marketplace que conecta pacientes con médicos, opera como ZnanyLekarz en Polonia y Doctoralia en España/Latam, entre otras marcas).
+This project is a real, runnable RAG (Retrieval Augmented Generation) system, built as a technical prep exercise. The use case is hypothetical: a support assistant that answers patient questions based on a synthetic knowledge base inspired by DocPlanner's public business model (a marketplace connecting patients with doctors, operating as ZnanyLekarz in Poland and Doctoralia in Spain/Latam, among other brands).
 
-**Importante:** los documentos en `data/docplanner_kb/` son contenido sintético que yo (el asistente) generé para este ejercicio. No son documentación interna real de DocPlanner — están inspirados en cómo funciona públicamente ese tipo de plataforma (reservas, cancelaciones, teleconsulta, pagos, reseñas, privacidad, panel de administración de clínicas).
+**Important:** the documents in `data/docplanner_kb/` are synthetic content that I (the assistant) generated for this exercise. They are not real internal DocPlanner documentation — they're inspired by how that kind of platform publicly works (bookings, cancellations, teleconsultation, payments, reviews, privacy, clinic admin panel).
 
 ---
 
-## 1. Qué se construyó y por qué, paso a paso
+## 1. What was built, and why, step by step
 
-### 1.1 La base de conocimiento (`data/docplanner_kb/`)
+### 1.1 The knowledge base (`data/docplanner_kb/`)
 
-Nueve documentos markdown, cada uno cubriendo un tema de soporte distinto:
+Nine markdown documents, each covering a distinct support topic:
 
-| Archivo | Tema |
+| File | Topic |
 |---|---|
-| `01_booking_policy.md` | Cómo reservar un turno |
-| `02_cancellation_policy.md` | Cancelación y reprogramación |
-| `03_teleconsultation.md` | Consultas por videollamada |
-| `04_payments_insurance.md` | Pagos, obras sociales, reembolsos |
-| `05_doctor_profiles_faq.md` | Verificación de médicos, perfiles |
-| `06_reviews_ratings.md` | Reseñas y moderación |
-| `07_account_privacy.md` | Cuenta, datos personales, GDPR |
-| `08_clinic_admin_tims.md` | Panel de administración para clínicas |
-| `09_no_show_policy.md` | Ausencias (no-shows) |
+| `01_booking_policy.md` | How to book an appointment |
+| `02_cancellation_policy.md` | Cancellation and rescheduling |
+| `03_teleconsultation.md` | Video-call consultations |
+| `04_payments_insurance.md` | Payments, insurance, refunds |
+| `05_doctor_profiles_faq.md` | Doctor verification, profiles |
+| `06_reviews_ratings.md` | Reviews and moderation |
+| `07_account_privacy.md` | Account, personal data, GDPR |
+| `08_clinic_admin_tims.md` | Admin panel for clinics |
+| `09_no_show_policy.md` | No-shows |
 
-Elegí temas que se solapan a propósito (por ejemplo, cancelación aparece tanto en el documento de cancelación como en el de teleconsulta y no-show) para que el retriever tenga que discriminar cuál es realmente la fuente más relevante — si todo fuera perfectamente único, Recall@K sería trivial y no probaría nada.
+I deliberately chose overlapping topics (e.g. cancellation shows up in the cancellation doc, the teleconsultation doc, and the no-show doc) so the retriever actually has to discriminate which source is truly most relevant — if everything were perfectly unique, Recall@K would be trivial and wouldn't prove anything.
 
 ### 1.2 Chunking (`src/chunking.py`, `src/config.py`)
 
-Cada documento se corta en fragmentos de **180 palabras con 40 de solapamiento** (`CHUNK_SIZE_WORDS` / `CHUNK_OVERLAP_WORDS` en `config.py`). Corto por palabras, no por caracteres, para no partir palabras a la mitad, y el overlap existe para no perder contexto que quede justo en el borde entre dos chunks — el mismo problema que explicamos en el punto 7 del framework de conceptos (chunking mal hecho = RAG que no encuentra la respuesta aunque el embedding sea perfecto).
+Each document is cut into fragments of **180 words with 40 words of overlap** (`CHUNK_SIZE_WORDS` / `CHUNK_OVERLAP_WORDS` in `config.py`). I cut by words, not characters, so words never get split in half, and the overlap exists so context sitting right at the boundary between two chunks isn't lost — the same problem covered in point 7 of the concepts framework (bad chunking = a RAG that can't find the answer even with a perfect embedding).
 
-En producción, en vez de contar palabras se usaría un tokenizer real (por ejemplo `tiktoken`) para respetar el límite exacto de tokens del embedding model. Acá cuento palabras para no sumar una dependencia extra.
+In production, instead of counting words you'd use a real tokenizer (e.g. `tiktoken`) to respect the embedding model's exact token limit. Here I count words to avoid adding an extra dependency.
 
 ### 1.3 Embeddings (`src/embeddings.py`)
 
-Uso la API de OpenAI (`text-embedding-3-small` por defecto, configurable en `.env`). Está aislado en un solo módulo a propósito: si mañana querés cambiar a Cohere o a un modelo self-hosted, tocás un solo archivo, no todo el pipeline.
+Uses the OpenAI API (`text-embedding-3-small` by default, configurable via `.env`). It's isolated in its own module on purpose: if you ever want to switch to Cohere or a self-hosted model, you touch one file, not the whole pipeline.
 
 ### 1.4 Vector store (`src/vector_store.py`)
 
-En vez de usar Pinecone o Weaviate (que requerirían una cuenta externa y agregarían complejidad), implementé un vector store casero con `numpy`: guarda una matriz de vectores normalizados + su metadata (documento fuente, texto del chunk), y busca por similitud coseno con producto punto. Con 9 documentos esto es más que suficiente en performance, y de paso muestra exactamente qué hace un vector store por dentro, sin que sea una caja negra. El índice se persiste en `index/vectors.npy` + `index/meta.json`.
+Instead of using Pinecone or Weaviate (which would require an external account and add complexity), I implemented a homemade vector store with `numpy`: it stores a matrix of normalized vectors plus their metadata (source document, chunk text), and searches by cosine similarity via dot product. With 9 documents this is more than enough performance-wise, and it shows exactly what a vector store does under the hood, instead of being a black box. The index is persisted to `index/vectors.npy` + `index/meta.json`.
 
-### 1.5 Ingestión (`src/ingest.py`)
+### 1.5 Ingestion (`src/ingest.py`)
 
-Este script conecta todo lo anterior: lee los `.md`, los chunkea, los embebe en batches de a 100, y guarda el índice. Se corre una sola vez (o cada vez que cambia la base de conocimiento) — es el pipeline *offline* de un RAG, separado del pipeline *online* que responde preguntas en tiempo real.
+This script wires everything above together: reads the `.md` files, chunks them, embeds them in batches of 100, and saves the index. It runs once (or whenever the knowledge base changes) — it's the *offline* half of a RAG pipeline, separate from the *online* half that answers questions in real time.
 
 ### 1.6 Retriever (`src/retriever.py`)
 
-Dado un texto de consulta, lo embebe con el mismo modelo usado en la ingestión, y devuelve los top-K chunks más parecidos (K=4 por defecto). Esta es la pieza que se mide con **Recall@K**.
+Given a query, it embeds it with the same model used at ingestion time, and returns the top-K most similar chunks (K=4 by default). This is the piece measured by **Recall@K**.
 
-### 1.7 Orquestación RAG (`src/rag.py`)
+### 1.7 RAG orchestration (`src/rag.py`)
 
-La función `answer(pregunta)` hace lo que describimos en la teoría: retrieval → arma un prompt con los chunks recuperados como contexto (citando la fuente de cada uno) → se lo pasa al LLM con una instrucción explícita de responder solo en base a ese contexto y de decir "no lo sé" si el contexto no alcanza → devuelve la respuesta junto con las fuentes usadas, para que se pueda auditar de dónde salió cada afirmación.
+The `answer(question)` function does exactly what the theory describes: retrieval → assembles a prompt with the retrieved chunks as context (citing each one's source) → passes it to the LLM with an explicit instruction to answer only from that context and say "I don't know" if the context isn't enough → returns the answer along with the sources used, so every claim can be traced back to where it came from.
 
 ### 1.8 CLI (`chat.py`)
 
-Un loop simple de terminal para hacerle preguntas al asistente de forma interactiva.
+A simple terminal loop for asking the assistant questions interactively.
 
-### 1.9 Evaluación (`eval/golden_dataset.json`, `eval/evaluate.py`)
+### 1.9 Evaluation (`eval/golden_dataset.json`, `eval/evaluate.py`)
 
-Un golden dataset (punto 5 del framework) con 10 preguntas reales que un paciente le haría al asistente, cada una con el documento fuente que *debería* aparecer entre los resultados. `evaluate.py` calcula:
+A golden dataset (point 5 of the framework) with 10 real questions a patient might ask the assistant, each paired with the source document that *should* show up among the results. `evaluate.py` computes:
 
-- **Recall@K**: para cada pregunta, ¿el documento esperado apareció entre los top-K recuperados?
-- **Faithfulness**, vía **LLM-as-a-judge** (punto 4): para cada pregunta, genero la respuesta completa y le pido a otro llamado al LLM que juzgue, viendo el contexto y la respuesta, si la respuesta está 100% respaldada por ese contexto o si inventó algo.
+- **Recall@K**: for each question, did the expected document show up among the top-K retrieved?
+- **Faithfulness**, via **LLM-as-a-judge** (point 4): for each question, I generate the full answer and ask a second LLM call to judge, given the context and the answer, whether the answer is 100% supported by that context or invented something.
 
-Esto conecta directamente cuatro de los conceptos que ya vimos (Recall@K, Faithfulness, LLM-as-judge, Golden dataset) en código que corre de verdad, no solo en la teoría.
+This directly connects four of the concepts already covered (Recall@K, Faithfulness, LLM-as-judge, golden dataset) in code that actually runs, not just theory.
 
-### 1.10 Smoke test sin costo (`tests/test_pipeline.py`)
+### 1.10 Zero-cost smoke test (`tests/test_pipeline.py`)
 
-Antes de gastar en llamadas reales a la API, este test reemplaza los embeddings por una versión falsa pero determinística (basada en hash de palabras) para probar que chunking + vector store + retrieval funcionan de punta a punta sin errores de "plomería". Ya lo corrí yo mismo al construir el proyecto — pasa sin necesitar ninguna API key.
+Before spending on real API calls, this test replaces embeddings with a fake but deterministic version (based on hashing words) to prove chunking + vector store + retrieval work end to end with no "plumbing" bugs. I already ran it myself while building the project — it passes with no API key needed.
 
 ---
 
-## 2. Cómo correrlo
+## 2. How to run it
 
-### 2.1 Requisitos
+### 2.1 Requirements
 
-- Python 3.10+ (probado con 3.10)
-- Una API key de OpenAI (https://platform.openai.com/api-keys) — el proyecto hace llamadas reales a la API de embeddings y de chat, así que vas a necesitar crédito cargado en tu cuenta (los costos son mínimos: unos centavos para todo el knowledge base y varias preguntas)
+- Python 3.10+ (tested on 3.10)
+- An OpenAI API key (https://platform.openai.com/api-keys) — the project makes real calls to the embeddings and chat APIs, so you'll need credit loaded on your account (costs are minimal: a few cents for the whole knowledge base and several questions)
 
-### 2.2 Instalación
+### 2.2 Installation
 
 ```bash
 cd /Users/mcsuarez/rag-training
 python3 -m venv venv
-source venv/bin/activate        # en Windows: venv\Scripts\activate
+source venv/bin/activate        # on Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 2.3 Configurar tu API key
+### 2.3 Set up your API key
 
 ```bash
 cp .env.example .env
 ```
 
-Editá `.env` y reemplazá `sk-...` por tu clave real de OpenAI.
+Edit `.env` and replace `sk-...` with your real OpenAI key.
 
-### 2.4 Verificar que el código funciona, sin gastar nada (opcional pero recomendado)
+### 2.4 Verify the code works, at zero cost (optional but recommended)
 
 ```bash
 python -m tests.test_pipeline
 ```
 
-Deberías ver:
+You should see:
 ```
 OK chunking: 4 chunks generados a partir de 500 palabras
 OK retrieval: top resultado -> doc_0.md (score=0.378)
@@ -111,21 +111,21 @@ OK retrieval: top resultado -> doc_0.md (score=0.378)
 Todos los smoke tests pasaron sin necesidad de API key.
 ```
 
-### 2.5 Construir el índice (ingestión)
+### 2.5 Build the index (ingestion)
 
 ```bash
 python -m src.ingest
 ```
 
-Esto lee los 9 documentos, genera ~20 chunks, los embebe con OpenAI, y guarda el índice en `index/`. Se corre una sola vez (o de nuevo si editás los documentos de `data/docplanner_kb/`).
+This reads the 9 documents, generates ~20 chunks, embeds them with OpenAI, and saves the index to `index/`. It runs once (or again if you edit the documents in `data/docplanner_kb/`).
 
-### 2.6 Hablar con el asistente
+### 2.6 Talk to the assistant
 
 ```bash
 python chat.py
 ```
 
-Ejemplo de sesión:
+Example session:
 ```
 Vos: ¿cuánto tiempo antes puedo cancelar sin que me cobren?
 Asistente: Podés cancelar sin costo si lo hacés con al menos 24 horas de
@@ -135,74 +135,74 @@ configuración [02_cancellation_policy.md].
 Fuentes: 02_cancellation_policy.md
 ```
 
-### 2.7 Correr la evaluación completa (Recall@K + Faithfulness)
+### 2.7 Run the full evaluation (Recall@K + Faithfulness)
 
 ```bash
 python -m eval.evaluate
 ```
 
-Esto corre las 10 preguntas del golden dataset contra el retriever (Recall@K) y contra el pipeline completo con LLM-as-judge (Faithfulness), e imprime el score final de cada métrica.
+This runs the golden dataset's 10 questions against the retriever (Recall@K) and against the full pipeline with LLM-as-judge (Faithfulness), and prints the final score for each metric.
 
-### 2.8 UI web — ver el pipeline en tiempo real
+### 2.8 Web UI — watch the pipeline in real time
 
-Además del CLI, el proyecto tiene una UI web (`web/`) pensada para el mismo objetivo educativo: mostrar gráficamente, paso a paso y en tiempo real, qué hace el sistema tanto al construir el índice (ingestión) como al responder una pregunta (retrieval + generación), incluyendo cómo el texto se convierte en vectores y cómo se guardan.
+Besides the CLI, the project has a web UI (`web/`) built for the same educational goal: show, graphically, step by step, and in real time, what the system does both while building the index (ingestion) and while answering a question (retrieval + generation), including how text becomes vectors and how they're stored.
 
 ```bash
 python -m web.server
-# o, equivalente:
+# or, equivalently:
 uvicorn web.server:app --reload
 ```
 
-Después abrí [http://127.0.0.1:8000](http://127.0.0.1:8000) en el navegador. Requiere el mismo `.env` con `OPENAI_API_KEY` que el CLI (ver 2.3). **La interfaz de la UI web está en inglés** (pensada para compartirse), aunque la base de conocimiento y las respuestas del asistente siguen en español — la UI lo aclara en un banner.
+Then open [http://127.0.0.1:8000](http://127.0.0.1:8000) in your browser. It requires the same `.env` with `OPENAI_API_KEY` as the CLI (see 2.3). **The web UI's interface is in English** (built to be shared), while the knowledge base and the assistant's answers stay in Spanish — the UI clarifies this in a banner.
 
-Lo primero que se ve es una **pantalla de aterrizaje**: explica qué es RAG, muestra un preview no interactivo de los dos pipelines (offline: Documents → Chunking → Embeddings → Vector index; online: Question → Search → Top-K → Prompt → LLM → Answer) y un glosario corto de los conceptos que se van a ver (chunking, embeddings, cosine similarity/top-K, prompt assembly, RAG vs fine-tuning, Recall@K, Faithfulness). El botón **"Start the demo"** arranca ahí una sesión aislada para ese visitante (ver 2.9) y recién ahí aparece la app de cuatro pestañas:
+The first thing you see is a **landing screen**: it explains what RAG is, shows a non-interactive preview of both pipelines (offline: Documents → Chunking → Embeddings → Vector index; online: Question → Search → Top-K → Prompt → LLM → Answer), and a short glossary of the concepts you're about to see (chunking, embeddings, cosine similarity/top-K, prompt assembly, RAG vs fine-tuning, Recall@K, Faithfulness). The **"Start the demo"** button spins up an isolated session for that visitor there (see 2.9), and only then does the four-tab app appear:
 
-- **Build the Index**: botón para (re)construir el índice, con un diagrama animado (Documents → Chunking → Embeddings → Index saved) que se va iluminando en vivo, mostrando cuántos chunks salió de cada documento y el progreso de cada batch de embeddings.
-- **Ask a Question**: hacé una pregunta y mirá en vivo el diagrama (Question → Embedding → Search → Top-K → Prompt → LLM → Answer), el embedding de tu pregunta como una tira de color, la similitud coseno de **todos** los chunks contra tu pregunta (con los top-K resaltados, para ver por qué ganaron sobre el resto), un mapa 2D (PCA) de dónde cae tu pregunta respecto a cada chunk, el prompt final armado con el contexto citado, y la respuesta apareciendo en streaming real token por token. Una nota expandible aclara que esto es RAG clásico de un solo paso — sin LangChain ni LangGraph, sin loop de decisión — para no leerse como agéntico sin serlo.
-- **Explore the Data**: navegá los 9 documentos, mirá exactamente en qué rango de palabras se cortó cada chunk (con el overlap resaltado), y — una vez construido el índice — inspeccioná el vector real guardado para cualquier chunk (dimensión, norma, y los 1536 números crudos). Un visor de código muestra el **código fuente real** de `chunking`, `embeddings`, `vector_store` y `_build_prompt`, obtenido en vivo con `inspect.getsource()` — nunca una copia que se pueda desincronizar del código que corrió de verdad.
-- **Metrics & Concepts**: Recall@K y Faithfulness (LLM-as-a-judge) corridos contra el golden dataset de 10 preguntas — el snapshot committeado por default, o en vivo si tenés una key. Hallucination rate se muestra como lo que es, `1 − faithfulness`, nunca una medición separada. Latencia real (P50/P95/P99, con el mínimo de muestras honestamente exigido antes de mostrar percentiles) de las preguntas que hiciste en la sesión. Y un glosario filtrado de conceptos de RAG/AI-engineering, incluyendo cuáles quedaron deliberadamente afuera y por qué (DORA metrics, CodeScene, EU AI Act — ninguno aplica a una demo local de un solo autor).
+- **Build the Index**: a button to (re)build the index, with an animated diagram (Documents → Chunking → Embeddings → Index saved) that lights up live, showing how many chunks came out of each document and each embedding batch's progress.
+- **Ask a Question**: ask something and watch the diagram live (Question → Embedding → Search → Top-K → Prompt → LLM → Answer), your question's embedding as a color strip, the cosine similarity of **every** chunk against your question (with the top-K highlighted, so you can see why they won over the rest), a **3D map** of where your question lands relative to every chunk — rendered with Three.js, with real orbit controls (drag to rotate, scroll to zoom, pan) and an exact-similarity label on hover or tap, not just a rough visual guess — the final assembled prompt with its cited context, and the answer streaming in token by token, for real. A **Classic RAG vs. Agentic RAG toggle** lets you run the exact same question through two different pipelines and compare them side by side: Classic mode is the single fixed pass just described; Agentic mode gives the model a `retrieve_context` tool via native OpenAI tool calling (no LangChain/LangGraph) and lets *it* decide whether to call it zero, one, or several times — reformulating the query in between — before answering, showing a step-by-step trace of every search it chose to run.
+- **Explore the Data**: browse the 9 documents, see exactly what word range each chunk was cut from (with the overlap highlighted), and — once the index is built — inspect the real stored vector for any chunk (dimension, norm, and the raw 1536 numbers). A code viewer shows the **real source code** for `chunking`, `embeddings`, `vector_store`, `_build_prompt`, and the agentic loop, fetched live via `inspect.getsource()` — never a copy that could drift out of sync with what actually ran.
+- **Metrics & Concepts**: Recall@K and Faithfulness (LLM-as-a-judge) run against the 10-question golden dataset — the committed snapshot by default, or live if you have a key. Hallucination rate is shown as exactly what it is, `1 − faithfulness`, never a separate measurement. Real latency (P50/P95/P99, with the minimum sample count honestly required before showing percentiles) for the questions you asked this session. And a filtered glossary of RAG/AI-engineering concepts, including which ones were deliberately left out and why (DORA metrics, CodeScene, EU AI Act — none of them apply to a single-author local demo).
 
-Internamente, `src/ingest.py`, `src/retriever.py`, `src/rag.py` y `eval/evaluate.py` aceptan dos parámetros opcionales: `on_event` (default `None`, emite eventos de progreso) y `api_key` (default `None`, usa `config.OPENAI_API_KEY`) — el CLI no pasa ninguno de los dos y sigue funcionando exactamente igual que antes. `src/chunking.py` expone además `chunk_spans()` (rangos de palabras por chunk, usado para el visor de "Explore"). `eval/generate_snapshot.py` corre una evaluación real y la guarda en `eval/results_snapshot.json` (committeado) — correlo de nuevo (`python -m eval.generate_snapshot`) si cambiás los documentos o el golden dataset. El server (`web/server.py`) es la única parte del proyecto que sabe de FastAPI: traduce esos eventos a Server-Sent Events (SSE) para el frontend estático (`web/static/`, HTML/CSS/JS plano, sin build step), y expone además endpoints de solo lectura para navegar documentos/chunks/vectores/código, todos con whitelist (nunca se arma un path ni se evalúa un símbolo a partir de input del cliente).
+Under the hood, `src/ingest.py`, `src/retriever.py`, `src/rag.py`, `src/agentic_rag.py`, and `eval/evaluate.py` accept a few optional parameters: `on_event` (default `None`, emits progress events), `api_key` (default `None`, uses `config.OPENAI_API_KEY`), and `session_id` (default `None`, uses the shared global index) — the CLI passes none of them and keeps working exactly as before. `src/chunking.py` also exposes `chunk_spans()` (word ranges per chunk, used by the "Explore" viewer). `eval/generate_snapshot.py` runs a real evaluation and saves it to `eval/results_snapshot.json` (committed) — run it again (`python -m eval.generate_snapshot`) if you change the documents or the golden dataset. The server (`web/server.py`) is the only part of the project that knows about FastAPI: it translates those events into Server-Sent Events (SSE) for the static frontend (`web/static/`, plain HTML/CSS/JS, no build step, with Three.js as its only vendored frontend dependency), and also exposes read-only endpoints for browsing documents/chunks/vectors/code, all whitelisted (no path is ever assembled or symbol evaluated from client input).
 
-### 2.9 Demo pública en Vercel — quién paga las llamadas a OpenAI
+### 2.9 Public demo on Vercel — who pays for the OpenAI calls
 
-La demo en [rag-training.vercel.app](https://rag-training.vercel.app) **sí tiene una OpenAI API key propia** configurada como variable de entorno en Vercel (`OPENAI_API_KEY`), para que cualquiera pueda probar el pipeline en vivo sin fricción de entrada. Como esa key paga las llamadas de cualquier visitante anónimo, tiene dos capas de protección:
+The demo at [rag-training.vercel.app](https://rag-training.vercel.app) **does have its own OpenAI API key**, configured as an environment variable on Vercel (`OPENAI_API_KEY`), so anyone can try the live pipeline with zero setup friction. Since that key pays for every anonymous visitor's calls, it has two layers of protection:
 
-- **Rate limiting server-side** (`_check_rate_limit()` en `web/server.py`): 5 acciones gratis por IP por hora (preguntar / reconstruir índice), 1 corrida de evaluación en vivo gratis por IP por día, y un presupuesto compartido de ~300 llamadas a OpenAI por día entre todos los visitantes. Solo aplica cuando el pedido *no* trae su propia key — quien pega la suya nunca choca con estos límites, porque gasta su propia plata, no la del demo.
-  - **Límite honesto, no criptográfico:** el contador vive en memoria del proceso, no en una base de datos compartida. Confirmé en producción que sí bloquea ráfagas secuenciales del mismo visitante (una 6ª pregunta seguida devuelve el error de límite sin gastar), pero un abuso deliberado y paralelo repartido entre varias instancias serverless podría superarlo — Vercel no comparte memoria entre instancias. Para un demo educativo chico esto es proporcional; no agrega una dependencia externa (Redis/Vercel KV) para un problema de esta escala.
-  - **El backstop real es el tope de gasto de la cuenta de OpenAI** (platform.openai.com/settings/organization/limits) — poné un límite duro ahí, independiente de cualquier bug o gap en este código.
-- **Gratis y sin key, siempre:** "Explore the Data" (documentos, chunks, vectores, código fuente real) y el snapshot de "Metrics & Concepts" (`eval/results_snapshot.json`, de una corrida real committeada al repo) no llaman a OpenAI en absoluto — no cuentan contra ningún límite.
-- Pegar tu propia key (campo arriba de la página) evita los límites de arriba y te deja usar la demo sin depender del presupuesto compartido. Se guarda solo en `sessionStorage` de esa pestaña (desaparece al cerrarla), viaja únicamente como header (`X-OpenAI-Key`) en el pedido que la necesita — nunca en la URL, nunca logueada ni guardada en el servidor.
-- Localmente (`python -m web.server` con tu `.env`), el rate limiting igual corre por código, pero como sos el único usuario en la práctica no debería notarse.
+- **Server-side rate limiting** (`_check_rate_limit()` in `web/server.py`): 5 free actions per IP per hour (ask / rebuild the index), 1 free live evaluation run per IP per day, and a shared budget of ~300 OpenAI calls per day across all visitors combined. This only applies when the request does *not* bring its own key — anyone who pastes theirs never runs into these limits, since they're spending their own money, not the demo's.
+  - **Honest limit, not a cryptographic guarantee:** the counter lives in the process's memory, not a shared database. I confirmed in production that it does block sequential bursts from the same visitor (a 6th question in a row returns the limit error without spending anything), but a deliberate, parallel abuse spread across several serverless instances could exceed it — Vercel doesn't share memory between instances. For a small educational demo this is proportionate; it avoids adding an external dependency (Redis/Vercel KV) for a problem of this scale.
+  - **The real backstop is the spending cap on the OpenAI account** (platform.openai.com/settings/organization/limits) — set a hard limit there, independent of any bug or gap in this code.
+- **Always free, no key needed:** "Explore the Data" (documents, chunks, vectors, real source code) and the "Metrics & Concepts" snapshot (`eval/results_snapshot.json`, from a real run committed to the repo) never call OpenAI at all — they don't count against any limit.
+- Pasting your own key (the field at the top of the page) skips the limits above and lets you use the demo without depending on the shared budget. It's stored only in that tab's `sessionStorage` (gone when you close it), travels only as a header (`X-OpenAI-Key`) on the request that needs it — never in the URL, never logged or stored on the server.
+- Locally (`python -m web.server` with your own `.env`), the rate limiting still runs in code, but since you're effectively the only user in practice, you shouldn't notice it.
 
-**Si reconstruís el índice desde la demo pública sin pasar por una sesión** (llamando a la API directo, sin header `X-Session-Id`): el filesystem de Vercel es de solo lectura fuera de `/tmp`, así que el índice recién construido **no se guarda en disco** — queda activo en memoria (`retriever.set_store()`) solo para la instancia serverless que atendió ese pedido. Tu próxima pregunta puede o no caer en esa misma instancia (Vercel no garantiza afinidad de sesión). No es un bug, es routing serverless — por eso el índice pre-construido committeado sigue siendo el fallback confiable para cualquier otra instancia.
+**If you rebuild the index from the public demo without going through a session** (calling the API directly, with no `X-Session-Id` header): Vercel's filesystem is read-only outside of `/tmp`, so the freshly built index **isn't saved to disk** — it stays active in memory (`retriever.set_store()`) only for the serverless instance that handled that request. Your next question may or may not land on that same instance (Vercel doesn't guarantee session affinity). That's not a bug, it's serverless routing — which is exactly why the pre-built, committed index remains the reliable fallback for any other instance.
 
-**Sesiones de demo (landing page → "Start the demo"):** cada visitante que arranca la demo desde la pantalla de aterrizaje recibe un UUID generado en el browser (`crypto.randomUUID()`, guardado en `sessionStorage`, mandado como header `X-Session-Id` — mismo mecanismo que la key BYOK, nunca una cookie), con el que `/api/session/start` le siembra una copia del índice compartido. Desde ahí, cada reconstrucción o pregunta de esa sesión queda aislada — nunca pisa el índice compartido en disco ni el de otra sesión — y expira sola a las 24h. A diferencia del párrafo anterior, **esto sí es una garantía real y no un best-effort**, siempre que el deploy tenga `REDIS_URL` configurada (ver `.env.example`): el TTL nativo de Redis borra la sesión solo, sin ningún cron, y como Redis es compartido entre instancias serverless, tu sesión sobrevive sin importar cuál te responda. Sin `REDIS_URL` configurada (o en local sin Redis corriendo), las sesiones caen a un dict en memoria del proceso — anduvo perfecto para desarrollo local, pero en Vercel eso vuelve a ser best-effort como el resto de este párrafo. Provisionarlo: Vercel Marketplace → una integración de Redis (p. ej. Upstash) → copiá la URL que te inyecte a las env vars del proyecto.
+**Demo sessions (landing page → "Start the demo"):** every visitor who starts the demo from the landing screen gets a UUID generated in the browser (`crypto.randomUUID()`, stored in `sessionStorage`, sent as an `X-Session-Id` header — the same mechanism as the BYOK key, never a cookie), which `/api/session/start` uses to seed them a copy of the shared index. From there, every rebuild or question in that session stays isolated — it never touches the shared index on disk or another session's — and it expires on its own after 24h. Unlike the paragraph above, **this is a real guarantee, not best-effort**, as long as the deployment has `REDIS_URL` configured (see `.env.example`): Redis's native TTL deletes the session on its own, with no cron job, and since Redis is shared across serverless instances, your session survives no matter which one answers you. Without `REDIS_URL` configured (or locally with no Redis running), sessions fall back to an in-process dict — works great for local development, but on Vercel that's back to best-effort like the rest of this paragraph. To provision it: Vercel Marketplace → a Redis integration (e.g. Upstash) → copy the URL it injects into the project's env vars.
 
-**Cómo se deployó** (por si querés reproducirlo o forkearlo):
+**How it was deployed** (in case you want to reproduce or fork it):
 
 ```bash
-npm i -g vercel   # si no la tenés
-vercel link       # una vez, por proyecto
+npm i -g vercel   # if you don't have it
+vercel link       # once, per project
 vercel deploy --prod
 ```
 
-- `pyproject.toml` le dice a Vercel dónde está la app (`web.server:app`) y define el build step.
-- `build_static.py` copia `web/static/` a `public/` en cada deploy — Vercel sirve `public/**` directo desde su CDN, sin pasar por la función Python, así que `web/static/` sigue siendo la única fuente de verdad.
-- `vercel.json` sube el timeout de la función a 60s (la evaluación completa hace ~30 llamadas reales y puede acercarse al límite).
-- `index/vectors.npy` + `index/meta.json` están committeados (ver `.gitignore`) para que las pestañas de solo lectura funcionen sin depender de una ingestión previa en cada instancia.
-- **`.vercelignore` es crítico:** a diferencia de lo que yo asumía, el CLI de Vercel *no* excluye automáticamente los archivos listados en `.gitignore` — así que sin un `.vercelignore` explícito, `.env` (con tu key real) terminaría subido al bundle de la función. Si forkeás esto, no lo borres.
-- **Statelessness real (fuera de una sesión):** cada request puede caer en una instancia serverless distinta, sin disco compartido. Si reconstruís el índice sin pasar por el flujo de sesión, tu próxima pregunta podría no verlo — no es un bug, la pestaña "Build the Index" lo explica. Dentro de una sesión de demo (ver 2.9) esto no aplica: con `REDIS_URL` configurada, tu índice sobrevive 24h sin importar qué instancia te responda.
-- `REDIS_URL` (opcional, ver 2.9): sin configurar, las sesiones de demo caen a memoria del proceso — funcionan, pero solo dentro de la misma instancia serverless. Provisionala vía Vercel Marketplace (p. ej. Upstash Redis) para que sean durables entre instancias.
+- `pyproject.toml` tells Vercel where the app is (`web.server:app`) and defines the build step.
+- `build_static.py` copies `web/static/` to `public/` on every deploy — Vercel serves `public/**` directly from its CDN, without going through the Python function, so `web/static/` stays the single source of truth.
+- `vercel.json` raises the function timeout to 60s (the full evaluation makes ~30 real calls and can get close to the limit).
+- `index/vectors.npy` + `index/meta.json` are committed (see `.gitignore`) so the read-only tabs work without depending on a prior ingestion on each instance.
+- **`.vercelignore` is critical:** unlike what I assumed, the Vercel CLI does *not* automatically exclude files listed in `.gitignore` — so without an explicit `.vercelignore`, `.env` (with your real key) would end up uploaded in the function bundle. If you fork this, don't delete it.
+- **Real statelessness (outside of a session):** each request can land on a different serverless instance, with no shared disk. If you rebuild the index without going through the session flow, your next question might not see it — not a bug, the "Build the Index" tab explains it. Inside a demo session (see 2.9) this doesn't apply: with `REDIS_URL` configured, your index survives 24h no matter which instance answers you.
+- `REDIS_URL` (optional, see 2.9): unconfigured, demo sessions fall back to process memory — they work, but only within the same serverless instance. Provision it via the Vercel Marketplace (e.g. Upstash Redis) so they're durable across instances.
 
 ---
 
-## 3. Cómo extenderlo (para la conversación de entrevista)
+## 3. How to extend it (for the interview conversation)
 
-Este proyecto implementa RAG "clásico": el retrieval siempre corre antes de generar, sin que el modelo decida nada. Si quisiera evolucionarlo a **agentic RAG** (como discutimos: RAG + tool calling), el cambio sería exponer `retrieve()` como una *tool* que el modelo puede invocar cero, una o varias veces según lo necesite, en vez de llamarla siempre de entrada en `rag.py`. Eso te da un agente que puede decidir no buscar nada si la pregunta no lo requiere, o buscar de nuevo con otra query si la primera búsqueda no alcanzó — al costo de más llamadas al LLM y latencia menos predecible (el mismo trade-off que ya vimos en los puntos de ReAct y tool calling).
+This project already ships two RAG pipelines side by side, toggled live in the "Ask a Question" tab (see 2.8): **classic RAG**, where retrieval always runs before generation with no decision involved, and **agentic RAG** (`src/agentic_rag.py`), where `retrieve()` is exposed as a tool via native OpenAI tool calling that the model can call zero, one, or several times on its own — reformulating the query between calls — before deciding it has enough context to answer. That gives you an agent that can skip retrieval entirely if the question doesn't need it, or search again with a different query if the first attempt fell short — at the cost of more LLM calls and less predictable latency (the same trade-off already covered in the ReAct and tool-calling concepts).
 
-Otras extensiones naturales, en orden de esfuerzo creciente:
-1. Reemplazar el vector store casero por Chroma o Pinecone si el knowledge base creciera a miles de documentos.
-2. Agregar un re-ranker (Cohere Rerank) entre el retrieval y la generación para subir precisión sin cambiar el embedding model.
-3. Cachear embeddings de preguntas frecuentes para bajar costo y latencia (P50/P95/P99).
-4. Instrumentar `rag.py` con logging de latencia y de qué documentos se citan más, para detectar huecos en la base de conocimiento con el tiempo.
+Other natural extensions, in increasing order of effort:
+1. Replace the homemade vector store with Chroma or Pinecone if the knowledge base grew to thousands of documents.
+2. Add a re-ranker (Cohere Rerank) between retrieval and generation to boost precision without changing the embedding model.
+3. Cache embeddings for frequently asked questions to cut cost and latency (P50/P95/P99).
+4. Instrument `rag.py`/`agentic_rag.py` with logging of latency and which documents get cited most, to spot gaps in the knowledge base over time.

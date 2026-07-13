@@ -1,15 +1,15 @@
 """
-Smoke test del pipeline SIN necesidad de API key real.
+Pipeline smoke test with NO real API key needed.
 
-Reemplaza los embeddings de OpenAI por una versión determinística falsa
-(hash de palabras) para poder probar que chunking + vector store +
-retrieval funcionan de punta a punta, sin gastar en llamadas a la API.
+Replaces OpenAI embeddings with a fake but deterministic version (word
+hashing) so we can prove chunking + vector store + retrieval work end to
+end, with no spending on API calls.
 
-Esto NO reemplaza a eval/evaluate.py (que sí mide calidad real con
-embeddings y LLM reales) — es solo para verificar que el código no tiene
-bugs de "plomería" antes de gastar en API calls.
+This does NOT replace eval/evaluate.py (which does measure real quality
+with real embeddings and LLM) — it's only here to verify the code has no
+"plumbing" bugs before spending on API calls.
 
-Uso:
+Usage:
     python -m tests.test_pipeline
 """
 from __future__ import annotations
@@ -21,10 +21,10 @@ from src.vector_store import SimpleVectorStore
 
 
 def fake_embed(text: str, dim: int = 64) -> list[float]:
-    """Embedding falso pero determinístico: cada palabra suma a una
-    dimensión fija del vector, según el hash de la palabra. No tiene
-    ningún sentido semántico real — solo sirve para probar la plomería
-    sin necesitar una API key."""
+    """Fake but deterministic embedding: each word adds to a fixed
+    dimension of the vector, based on the word's hash. It has no real
+    semantic meaning — it's only good for testing the plumbing without
+    needing an API key."""
     vec = np.zeros(dim)
     for word in text.lower().split():
         idx = hash(word) % dim

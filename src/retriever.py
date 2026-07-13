@@ -1,7 +1,7 @@
 """
-Capa de retrieval: dado un texto de consulta, devuelve los top-K chunks
-más relevantes del índice ya construido (ver ingest.py). Esta es la pieza
-que se mide con Recall@K (punto 1 del framework).
+Retrieval layer: given a query text, returns the top-K most relevant
+chunks from the already-built index (see ingest.py). This is the piece
+measured by Recall@K (framework point 1).
 """
 from __future__ import annotations
 
@@ -52,9 +52,9 @@ def _cache_put(session_id: str, entry: dict) -> None:
 
 
 def get_default_store() -> SimpleVectorStore:
-    """El índice global compartido (el que vive en index/vectors.npy), sin
-    pasar por ninguna sesión. Único punto de acceso público a ese store para
-    quien necesite sembrar una sesión nueva a partir de él (ver
+    """The shared global index (the one living in index/vectors.npy), with
+    no session involved. The only public access point to that store for
+    anyone who needs to seed a new session from it (see
     web/server.py's /api/session/start).
     """
     return _get_store(session_id=None)
@@ -79,16 +79,16 @@ def _get_store(session_id: str | None = None) -> SimpleVectorStore:
 
     store = get_session_store().get(session_id)
     if store is None:
-        # Sesión nueva (o vencida): la sembramos con una copia del índice
-        # compartido, así una sesión inventada o expirada se recupera a un
-        # estado funcional en vez de fallar — esto no permite esquivar el
-        # rate limiting, que sigue siendo por IP, no por sesión (ver
+        # New (or expired) session: seed it with a copy of the shared
+        # index, so a made-up or expired session recovers to a working
+        # state instead of failing — this doesn't allow dodging rate
+        # limiting, which stays IP-keyed, not session-keyed (see
         # web/server.py).
         get_session_store().set(session_id, _get_store(session_id=None))
-        # Se relee en vez de cachear la variable de arriba: así lo que queda
-        # en _session_cache es siempre un objeto independiente del store
-        # global (session_store.set()/.get() copian), nunca una referencia
-        # aliaseada al singleton compartido.
+        # Re-read instead of caching the variable above: this way what
+        # stays in _session_cache is always an object independent from the
+        # global store (session_store.set()/.get() copy), never a
+        # reference aliased to the shared singleton.
         store = get_session_store().get(session_id)
 
     _cache_put(session_id, {"store": store, "pca_basis": None})
@@ -96,12 +96,12 @@ def _get_store(session_id: str | None = None) -> SimpleVectorStore:
 
 
 def reset_store() -> None:
-    """Invalida el índice cacheado en memoria (solo el global, no las sesiones).
+    """Invalidates the in-memory cached index (only the global one, not sessions).
 
-    Necesario cuando el proceso vive más que una sola consulta (por ejemplo
-    el server web): si se reconstruye el índice en disco, hay que forzar a
-    que la próxima llamada a retrieve() lo vuelva a cargar en vez de seguir
-    usando el store viejo cacheado en _store.
+    Needed when the process outlives a single query (e.g. the web server):
+    if the index gets rebuilt on disk, the next call to retrieve() needs to
+    be forced to reload it instead of continuing to use the old store
+    cached in _store.
     """
     global _store, _pca_basis
     _store = None
@@ -109,14 +109,15 @@ def reset_store() -> None:
 
 
 def set_store(store: SimpleVectorStore, session_id: str | None = None) -> None:
-    """Pone en memoria un store ya construido, sin pasar por disco.
+    """Activates an already-built store in memory, without going through disk.
 
-    Sin session_id: activa el store global para esta instancia del servidor
-    (en un filesystem de solo lectura — la demo pública en Vercel — guardar
-    el índice en disco puede fallar, pero el objeto igual existe en memoria).
+    Without session_id: activates the global store for this server
+    instance (on a read-only filesystem — the public Vercel demo — saving
+    the index to disk can fail, but the object still exists in memory).
 
-    Con session_id: el store queda aislado a esa sesión (ver
-    session_store.py), nunca pisa el índice global ni el de otra sesión.
+    With session_id: the store stays isolated to that session (see
+    session_store.py), never overwriting the global index or another
+    session's.
     """
     if session_id is None:
         global _store, _pca_basis
@@ -143,9 +144,9 @@ def _fit_pca(store: SimpleVectorStore) -> dict:
     _, _, vt = np.linalg.svd(vectors - mean, full_matrices=False)
     components = vt[:_PCA_COMPONENTS]
     if components.shape[0] < _PCA_COMPONENTS:
-        # Un store con menos chunks que componentes pedidos (SVD no puede dar
-        # más filas que min(n_chunks, dim)) — pad con ceros así el resto del
-        # código siempre puede asumir 3 componentes, sin casos especiales.
+        # A store with fewer chunks than requested components (SVD can't
+        # return more rows than min(n_chunks, dim)) — pad with zeros so the
+        # rest of the code can always assume 3 components, no special cases.
         pad = np.zeros((_PCA_COMPONENTS - components.shape[0], components.shape[1]))
         components = np.vstack([components, pad])
     return {"mean": mean, "components": components}
@@ -165,8 +166,8 @@ def _get_pca_basis(store: SimpleVectorStore, session_id: str | None = None) -> d
 
     entry = _cache_get(session_id)
     if entry is None:
-        # _get_store(session_id) siempre puebla el cache antes de que se
-        # pueda llegar acá; este es un fallback defensivo, sin cachear.
+        # _get_store(session_id) always populates the cache before this
+        # point can be reached; this is a defensive fallback, uncached.
         return _fit_pca(store)
     if entry["pca_basis"] is None:
         entry["pca_basis"] = _fit_pca(store)

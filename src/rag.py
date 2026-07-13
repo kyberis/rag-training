@@ -1,12 +1,12 @@
 """
-Orquestación RAG: retrieval + generación.
+RAG orchestration: retrieval + generation.
 
-answer(pregunta) hace exactamente lo que describimos en la teoría:
-1. Recupera los chunks más relevantes (retriever.py)
-2. Arma un prompt que incluye esos chunks como contexto, citando su fuente
-3. Le pide al LLM que responda SOLO en base a ese contexto
-4. Devuelve la respuesta + las fuentes usadas (necesario para medir
-   faithfulness después, ver eval/evaluate.py)
+answer(question) does exactly what the theory describes:
+1. Retrieves the most relevant chunks (retriever.py)
+2. Assembles a prompt that includes those chunks as context, citing their source
+3. Asks the LLM to answer ONLY based on that context
+4. Returns the answer + the sources used (needed to measure faithfulness
+   later, see eval/evaluate.py)
 """
 from __future__ import annotations
 
@@ -68,8 +68,8 @@ def answer(
         t_llm = time.time()
 
         if on_event is None:
-            # Camino sin instrumentar (chat.py, eval/evaluate.py): sin streaming,
-            # igual que siempre.
+            # Uninstrumented path (chat.py, eval/evaluate.py): no
+            # streaming, same as always.
             response = client.chat.completions.create(
                 model=config.CHAT_MODEL,
                 messages=messages,
@@ -77,9 +77,9 @@ def answer(
             )
             full_answer = response.choices[0].message.content
         else:
-            # La UI pidió eventos: pedimos la respuesta en streaming para poder
-            # emitir cada token a medida que llega (efecto "tiempo real" real,
-            # no simulado).
+            # The UI asked for events: request the answer streamed so we
+            # can emit each token as it arrives (a genuinely real-time
+            # effect, not simulated).
             stream = client.chat.completions.create(
                 model=config.CHAT_MODEL,
                 messages=messages,

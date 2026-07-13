@@ -1,18 +1,19 @@
 """
-Orquestación RAG agéntica: retrieval-as-tool + loop ReAct acotado.
+Agentic RAG orchestration: retrieval-as-tool + a bounded ReAct loop.
 
-Mismo contrato de entrada/salida que src/rag.py::answer() a propósito — así
-el server y el frontend tratan ambos modos simétricamente. La diferencia
-real está adentro: acá el modelo decide, vía tool calling nativo de OpenAI
-(sin LangChain ni LangGraph, igual que el resto del proyecto), si llama a
-retrieve() cero, una, o varias veces antes de responder — el patrón ReAct
-(Reason + Act) que la pestaña de Metrics menciona en su glosario.
+Deliberately the same input/output contract as src/rag.py::answer() —
+that way the server and frontend can treat both modes symmetrically. The
+real difference is on the inside: here the model decides, via native
+OpenAI tool calling (no LangChain or LangGraph, same as the rest of the
+project), whether to call retrieve() zero, one, or several times before
+answering — the ReAct pattern (Reason + Act) the Metrics tab's glossary
+mentions.
 
-Este archivo es deliberadamente independiente de rag.py (más allá del
-formato de contexto citado, que reutiliza el mismo estilo "[Fuente: ...]"):
-la idea es que cada uno sea legible de punta a punta por separado en el
-visor de código de la pestaña Explore — "acá está exactamente el clásico,
-acá está exactamente el agéntico" — no una abstracción compartida.
+This file is deliberately independent from rag.py (beyond the cited-context
+format, which reuses the same "[Fuente: ...]" style): the idea is that each
+one is readable end to end on its own in the Explore tab's code viewer —
+"here's exactly the classic one, here's exactly the agentic one" — not a
+shared abstraction.
 """
 from __future__ import annotations
 
@@ -61,10 +62,10 @@ RETRIEVE_TOOL_SCHEMA = {
 
 
 def _tag_iteration(on_event: EventCallback | None, iteration: int) -> EventCallback | None:
-    """Envuelve on_event para inyectar {"iteration": N} en cada evento que
-    emita una llamada anidada a retrieve() — sin tocar retriever.py: como
-    events.emit() ya hace on_event(name, {**payload, "ts": ...}), alcanza
-    con interceptar acá qué callback le pasamos a retrieve().
+    """Wraps on_event to inject {"iteration": N} into every event a nested
+    call to retrieve() emits — without touching retriever.py: since
+    events.emit() already does on_event(name, {**payload, "ts": ...}), it's
+    enough to intercept here which callback we pass to retrieve().
     """
     if on_event is None:
         return None
@@ -112,10 +113,10 @@ def answer_agentic(
             msg = response.choices[0].message
 
             if not msg.tool_calls:
-                # El modelo decidió que ya tiene suficiente contexto (o esta
-                # fue la última vuelta permitida, forzada con tool_choice=
-                # "none" — eso garantiza que el loop siempre termina acá,
-                # nunca en un bucle sin fin).
+                # The model decided it already has enough context (or this
+                # was the last allowed turn, forced with tool_choice=
+                # "none" — that guarantees the loop always terminates here,
+                # never in an endless loop).
                 emit(on_event, "agent_no_tool_call", iteration=iteration, elapsed_ms=int((time.time() - t_turn) * 1000))
                 sources = sorted(seen_sources)
                 final_text = msg.content or "No pude generar una respuesta."
@@ -131,11 +132,11 @@ def answer_agentic(
                 )
                 return {"answer": final_text, "sources": sources, "chunks": all_chunks, "iterations": iteration}
 
-            # Orden obligatorio: el mensaje del asistente que trae los
-            # tool_calls tiene que ir ANTES que sus respuestas role="tool" en
-            # la lista de mensajes — si no, la próxima llamada a la API
-            # devuelve un 400. El objeto ChatCompletionMessage del SDK se
-            # puede appendear directo a una lista de dicts sin conversión.
+            # Required order: the assistant message carrying the
+            # tool_calls has to go BEFORE its role="tool" replies in the
+            # messages list — otherwise the next API call returns a 400.
+            # The SDK's ChatCompletionMessage object can be appended
+            # straight into a list of dicts with no conversion needed.
             messages.append(msg)
 
             for call_index, tool_call in enumerate(msg.tool_calls):
@@ -159,9 +160,9 @@ def answer_agentic(
                     "content": _format_tool_result(chunks),
                 })
 
-        # Inalcanzable en la práctica: la última iteración siempre corre con
-        # tool_choice="none", lo que garantiza una respuesta de solo texto y
-        # el return dentro del if de arriba. Queda como resguardo defensivo.
+        # Unreachable in practice: the last iteration always runs with
+        # tool_choice="none", which guarantees a text-only response and the
+        # return inside the if above. Kept as a defensive safety net.
         raise RuntimeError("El loop agéntico agotó las iteraciones sin devolver una respuesta final.")
     except Exception as e:
         emit(on_event, "agent_error", message=str(e))

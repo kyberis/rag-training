@@ -1,22 +1,23 @@
 """
-Almacenamiento por-sesión de un SimpleVectorStore, con expiración a las 24h.
+Per-session storage for a SimpleVectorStore, expiring after 24h.
 
-Esto es lo que aísla la instancia de demo de cada visitante (ver la pantalla
-de aterrizaje / botón "Start the demo" en la UI) del índice global compartido
-que usa el resto del código (retriever.py sin session_id) — cada sesión tiene
-su propia copia de los vectores, que nunca pisa el índice committeado en
-index/.
+This is what isolates each visitor's demo instance (see the landing
+screen / "Start the demo" button in the UI) from the shared global index
+the rest of the code uses (retriever.py with no session_id) — each
+session has its own copy of the vectors, which never overwrites the
+committed index in index/.
 
-Dos backends detrás de la misma interfaz mínima:
+Two backends behind the same minimal interface:
 
-- RedisSessionStore: durable entre cold starts, correcto en Vercel (el TTL
-  nativo de una key de Redis es literalmente "se borra después de un día" —
-  no hace falta ningún cron/thread de limpieza).
-- InMemorySessionStore: fallback para desarrollo local sin Redis corriendo.
-  Alcanza porque un proceso local (`python -m web.server`) vive mucho tiempo.
+- RedisSessionStore: durable across cold starts, correct on Vercel (a
+  Redis key's native TTL is literally "gets deleted after a day" — no
+  cleanup cron/thread needed).
+- InMemorySessionStore: fallback for local development with no Redis
+  running. Good enough because a local process (`python -m web.server`)
+  lives a long time.
 
-Ninguno de los dos es la fuente de verdad del índice compartido — ese sigue
-siendo config.INDEX_VECTORS_PATH/INDEX_META_PATH en disco, sin cambios.
+Neither one is the source of truth for the shared index — that's still
+config.INDEX_VECTORS_PATH/INDEX_META_PATH on disk, unchanged.
 """
 from __future__ import annotations
 
@@ -31,7 +32,7 @@ import numpy as np
 from . import config
 from .vector_store import SimpleVectorStore
 
-SESSION_TTL_SECONDS = 86400  # 24h, fijo desde la creación (no se renueva con el uso)
+SESSION_TTL_SECONDS = 86400  # 24h, fixed from creation time (not renewed on use)
 
 
 class SessionStore(Protocol):
@@ -79,8 +80,8 @@ class InMemorySessionStore:
 
 class RedisSessionStore:
     def __init__(self, url: str) -> None:
-        # Importado acá, no en el tope del módulo: así el camino
-        # solo-en-memoria nunca requiere tener el paquete instalado.
+        # Imported here, not at the top of the module: this way the
+        # in-memory-only path never requires the package to be installed.
         import redis
 
         self._client = redis.Redis.from_url(url)
@@ -93,9 +94,8 @@ class RedisSessionStore:
         raw = self._client.get(self._key(session_id))
         if raw is None:
             return None
-        # Seguro: la única data que se deserializa acá es la que este mismo
-        # servidor escribió en set() más abajo — nunca algo mandado por un
-        # visitante.
+        # Safe: the only data deserialized here is what this same server
+        # wrote in set() below — never anything sent by a visitor.
         envelope = pickle.loads(raw)
         store = SimpleVectorStore()
         store.vectors = np.load(io.BytesIO(envelope["vectors_npy"]))
@@ -104,7 +104,7 @@ class RedisSessionStore:
 
     def set(self, session_id: str, store: SimpleVectorStore) -> None:
         buf = io.BytesIO()
-        np.save(buf, store.vectors)  # bytes .npy reales: preserva dtype/shape exacto
+        np.save(buf, store.vectors)  # real .npy bytes: preserves dtype/shape exactly
         envelope = {"vectors_npy": buf.getvalue(), "metadata": store.metadata}
         self._client.set(self._key(session_id), pickle.dumps(envelope), ex=SESSION_TTL_SECONDS)
 

@@ -1,16 +1,17 @@
 """
-Genera eval/results_snapshot.json: un snapshot committeado de una corrida
-real de evaluate_recall_at_k() + evaluate_faithfulness() contra el índice
-actual.
+Generates eval/results_snapshot.json: a committed snapshot of a real run
+of evaluate_recall_at_k() + evaluate_faithfulness() against the current
+index.
 
-Por qué existe: la demo pública (Vercel) no tiene una OPENAI_API_KEY propia
-(ver README, sección BYOK) — así que no puede correr esta evaluación en vivo
-gratis para cada visitante. Este snapshot es la corrida real más reciente,
-mostrada por default en la pestaña Metrics; el botón "Run evaluation" sigue
-disponible para quien quiera repetirla en vivo con su propia clave.
+Why it exists: the public demo (Vercel) doesn't have its own
+OPENAI_API_KEY set aside for this (see README, BYOK section) — so it
+can't run this evaluation live for free for every visitor. This snapshot
+is the most recent real run, shown by default in the Metrics tab; the
+"Run evaluation" button is still available for anyone who wants to
+repeat it live with their own key.
 
-Correr después de cualquier cambio a data/docplanner_kb/, eval/golden_dataset.json
-o al índice:
+Run after any change to data/docplanner_kb/, eval/golden_dataset.json,
+or the index:
 
     python -m src.ingest
     python -m eval.generate_snapshot

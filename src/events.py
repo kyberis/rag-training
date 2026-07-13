@@ -1,11 +1,11 @@
 """
-Helper compartido para instrumentar el pipeline con eventos de progreso.
+Shared helper for instrumenting the pipeline with progress events.
 
-Cada módulo del pipeline (ingest.py, retriever.py, rag.py) llama a emit()
-en los puntos clave para poder emitir eventos hacia quien esté escuchando
-(por ejemplo, el server web que los transmite por SSE). Si no hay nadie
-escuchando (on_event=None, el caso de chat.py y eval/evaluate.py), emit()
-no hace nada — el pipeline se comporta exactamente igual que antes.
+Every pipeline module (ingest.py, retriever.py, rag.py) calls emit() at
+key points so it can emit events to whoever's listening (e.g. the web
+server, which forwards them over SSE). If nobody's listening
+(on_event=None, the case for chat.py and eval/evaluate.py), emit() does
+nothing — the pipeline behaves exactly as it did before.
 """
 from __future__ import annotations
 
