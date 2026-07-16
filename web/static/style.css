@@ -44,6 +44,14 @@ body {
   box-shadow: 0 0 8px var(--accent);
 }
 
+.topbar-home-link {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.topbar-home-link:hover { color: var(--accent); }
+
 .status-banner {
   padding: 0.35rem 0.8rem;
   border-radius: 999px;
@@ -874,3 +882,47 @@ main { padding: 0 1.5rem 3rem; max-width: 1100px; margin: 0 auto; }
 }
 .ask-comparison-stat:last-child { border-bottom: none; }
 .ask-comparison-stat strong { color: var(--text); font-family: var(--mono); font-weight: 600; }
+
+/* ---------------------------------------------------------- hub (/) ----- */
+
+.hub-main { padding-top: 2rem; }
+.hub-intro { color: var(--text-muted); max-width: 65ch; line-height: 1.5; }
+
+.hub-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.hub-card {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.15s;
+}
+.hub-card:hover { border-color: var(--accent); }
+.hub-card h3 { color: var(--text); font-size: 1.05rem; }
+.hub-card p { line-height: 1.45; }
+
+.hub-card-tags { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.75rem; }
+.pill {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.hub-card-cta {
+  display: inline-block;
+  margin-top: 1rem;
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.hub-more-note { margin-top: 1.5rem; }
+
+.hub-footer { max-width: 1100px; margin: 2rem auto 3rem; padding: 0 1.5rem; }

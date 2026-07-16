@@ -3,34 +3,33 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>RAG Live — see how retrieval-augmented generation actually works</title>
-<meta name="description" content="A real, runnable RAG pipeline you can watch step by step: chunking, embeddings, vector search, prompt assembly, and streamed generation — plus a live comparison against plain keyword search, and real Recall@K / Faithfulness metrics. Free to explore, no signup." />
+<title>Trefolio Learning — hands-on, runnable demos of AI/ML techniques</title>
+<meta name="description" content="Trefolio Learning is a hub of hands-on, runnable demos of AI/ML techniques — starting with RAG Live, a real Retrieval-Augmented Generation pipeline you can watch and inspect step by step." />
 <meta name="robots" content="index, follow" />
 <meta name="author" content="Marcos Suarez" />
-<link rel="canonical" href="https://learning.trefolio.com/RAG" />
+<link rel="canonical" href="https://learning.trefolio.com" />
 
 <!-- Open Graph / social previews -->
 <meta property="og:type" content="website" />
-<meta property="og:site_name" content="RAG Live" />
-<meta property="og:title" content="RAG Live — see how retrieval-augmented generation actually works" />
-<meta property="og:description" content="A real, runnable RAG pipeline you can watch step by step — embeddings, vector search, and why it beats plain keyword search. Real source code, real metrics, no signup." />
-<meta property="og:url" content="https://learning.trefolio.com/RAG" />
-<meta property="og:image" content="https://learning.trefolio.com/RAG/og-image.png" />
+<meta property="og:site_name" content="Trefolio Learning" />
+<meta property="og:title" content="Trefolio Learning — hands-on, runnable demos of AI/ML techniques" />
+<meta property="og:description" content="A hub of hands-on, runnable demos of AI/ML techniques — starting with RAG Live, a real Retrieval-Augmented Generation pipeline you can watch and inspect step by step." />
+<meta property="og:url" content="https://learning.trefolio.com" />
+<meta property="og:image" content="https://learning.trefolio.com/og-image.png" />
 <meta property="og:image:width" content="1200" />
 <meta property="og:image:height" content="630" />
 <meta property="og:locale" content="en_US" />
 
 <meta name="twitter:card" content="summary_large_image" />
-<meta name="twitter:title" content="RAG Live — see how retrieval-augmented generation actually works" />
-<meta name="twitter:description" content="A real, runnable RAG pipeline you can watch step by step — embeddings, vector search, and why it beats plain keyword search." />
-<meta name="twitter:image" content="https://learning.trefolio.com/RAG/og-image.png" />
+<meta name="twitter:title" content="Trefolio Learning — hands-on, runnable demos of AI/ML techniques" />
+<meta name="twitter:description" content="A hub of hands-on, runnable demos of AI/ML techniques — starting with RAG Live, a real Retrieval-Augmented Generation pipeline you can watch and inspect step by step." />
+<meta name="twitter:image" content="https://learning.trefolio.com/og-image.png" />
 
-<!-- Icons / PWA -->
+<!-- Icons -->
 <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
 <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
 <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-<link rel="manifest" href="/manifest.json" />
 <meta name="theme-color" content="#0f1117" />
 
 <link rel="stylesheet" href="/style.css" />
@@ -38,779 +37,73 @@
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
-  "@type": ["LearningResource", "WebApplication"],
-  "name": "RAG Live",
-  "headline": "RAG Live — see how retrieval-augmented generation actually works",
-  "description": "A real, runnable Retrieval-Augmented Generation (RAG) system built as an educational demo: chunking, embeddings, vector search, prompt assembly, and generation, all inspectable live, plus a measured comparison against a naive keyword-search baseline and real Recall@K / Faithfulness evaluation metrics.",
-  "url": "https://learning.trefolio.com/RAG",
-  "image": "https://learning.trefolio.com/RAG/og-image.png",
+  "@type": "CollectionPage",
+  "name": "Trefolio Learning",
+  "headline": "Trefolio Learning — hands-on, runnable demos of AI/ML techniques",
+  "description": "A hub of hands-on, runnable demos of AI/ML techniques — starting with RAG Live, a real Retrieval-Augmented Generation pipeline you can watch and inspect step by step.",
+  "url": "https://learning.trefolio.com",
+  "image": "https://learning.trefolio.com/og-image.png",
   "inLanguage": "en",
   "isAccessibleForFree": true,
-  "learningResourceType": "Interactive demo",
-  "educationalUse": "instruction",
-  "audience": {
-    "@type": "Audience",
-    "audienceType": "Software engineers and AI/ML practitioners learning RAG"
-  },
-  "teaches": [
-    "Retrieval-Augmented Generation (RAG)",
-    "Text chunking and overlap",
-    "Vector embeddings",
-    "Cosine similarity and vector search",
-    "Embeddings-based search vs. keyword search",
-    "Recall@K",
-    "LLM-as-a-judge / Faithfulness evaluation",
-    "ReAct agents and tool calling"
-  ],
   "author": {
     "@type": "Person",
     "name": "Marcos Suarez"
   },
-  "codeRepository": "https://github.com/kyberis/rag-training",
-  "isBasedOn": "https://github.com/kyberis/rag-training"
+  "hasPart": [
+    {
+      "@type": "LearningResource",
+      "name": "RAG Live",
+      "description": "A real, runnable RAG pipeline you can watch step by step — embeddings, vector search, and why it beats plain keyword search.",
+      "url": "https://learning.trefolio.com/RAG"
+    }
+  ]
 }
 </script>
 </head>
 <body>
+
 <header class="topbar">
   <div class="topbar-title">
     <span class="dot"></span>
-    <h1>RAG Live</h1>
-    <span class="subtitle">A real, runnable RAG pipeline — watch every step happen</span>
+    <h1>Trefolio Learning</h1>
+    <span class="subtitle">Hands-on, runnable demos of AI/ML techniques</span>
   </div>
-  <div id="status-banner" class="status-banner status-unknown">Checking status…</div>
 </header>
 
-<p class="lang-note">
-  This is an educational demo (source on
-  <a href="https://github.com/kyberis/rag-training" target="_blank" rel="noopener">GitHub</a>).
-  The interface is in English, but the knowledge base and the assistant's answers are in
-  <strong>Spanish</strong> — the demo simulates a Spanish-language patient-support bot for a
-  synthetic healthcare-booking platform. That's intentional: the point is to see how the
-  <em>pipeline</em> works, not to read the sample content.
-</p>
+<main class="hub-main">
+  <p class="hub-intro">
+    Every demo here is real, runnable code, not slides — the point is to <em>see</em> a technique
+    work (and sometimes fail) step by step, with the actual source browsable inline, not just read
+    a description of it.
+  </p>
 
-<!-- ======================= LANDING SCREEN ======================= -->
-<section id="landing" class="landing">
-  <div class="landing-hero">
-    <h1>See Retrieval-Augmented Generation actually work</h1>
-    <p class="landing-sub">
-      RAG is how you make an LLM answer from <em>your own</em> documents instead of only what it
-      memorized during training: retrieve the relevant text at request time, hand it to the model
-      as context, and let it answer from that — citing its source. This page walks through a
-      real, runnable RAG pipeline end to end: every chunk, every vector, every retrieval, every
-      metric, computed live in front of you as you use it, not simulated or pre-recorded.
-    </p>
-    <button id="btn-start-demo" class="btn btn-primary btn-cta">Start the demo →</button>
-    <p id="landing-start-status" class="muted small" hidden></p>
-  </div>
-
-  <div class="landing-section">
-    <h2>How it works</h2>
-    <p class="muted small">
-      Two pipelines, run at different times. Every box below becomes a clickable, inspectable
-      step once the demo starts.
-    </p>
-
-    <p class="landing-pipeline-label">Offline — build the index once (or whenever documents change)</p>
-    <div class="pipeline landing-pipeline-preview">
-      <div class="pbox"><div class="pbox-icon">📄</div><div class="pbox-label">Documents</div></div>
-      <div class="parrow">→</div>
-      <div class="pbox"><div class="pbox-icon">✂️</div><div class="pbox-label">Chunking</div></div>
-      <div class="parrow">→</div>
-      <div class="pbox"><div class="pbox-icon">🧮</div><div class="pbox-label">Embeddings</div></div>
-      <div class="parrow">→</div>
-      <div class="pbox"><div class="pbox-icon">🗂️</div><div class="pbox-label">Vector index</div></div>
-    </div>
-
-    <p class="landing-pipeline-label">Online — every time you ask a question</p>
-    <div class="pipeline landing-pipeline-preview">
-      <div class="pbox"><div class="pbox-icon">❓</div><div class="pbox-label">Question</div></div>
-      <div class="parrow">→</div>
-      <div class="pbox"><div class="pbox-icon">🧮</div><div class="pbox-label">Embedding</div></div>
-      <div class="parrow">→</div>
-      <div class="pbox"><div class="pbox-icon">🔍</div><div class="pbox-label">Search</div></div>
-      <div class="parrow">→</div>
-      <div class="pbox"><div class="pbox-icon">🏆</div><div class="pbox-label">Top-K</div></div>
-      <div class="parrow">→</div>
-      <div class="pbox"><div class="pbox-icon">📝</div><div class="pbox-label">Prompt</div></div>
-      <div class="parrow">→</div>
-      <div class="pbox"><div class="pbox-icon">🤖</div><div class="pbox-label">LLM</div></div>
-      <div class="parrow">→</div>
-      <div class="pbox"><div class="pbox-icon">💬</div><div class="pbox-label">Answer</div></div>
-    </div>
-  </div>
-
-  <div class="landing-section">
-    <h2>What you'll explore</h2>
-    <div class="landing-topics grid-2">
-      <div class="card">
-        <h3>1. Build the Index</h3>
-        <p class="muted small">Watch documents get split into overlapping chunks and turned into
-          vectors by a real embedding model, batch by batch, in real time.</p>
-      </div>
-      <div class="card">
-        <h3>2. Ask a Question</h3>
-        <p class="muted small">Ask anything — see your question become a vector, get compared
-          against every chunk by cosine similarity, and watch the answer stream in, citing its
-          source. Includes a 2D map of where your question landed relative to every chunk.</p>
-      </div>
-      <div class="card">
-        <h3>3. Explore the Data</h3>
-        <p class="muted small">Browse the raw documents and chunks, inspect the actual stored
-          vectors, and read the real Python source that produced everything — fetched live from
-          the server, never a hand-written copy.</p>
-      </div>
-      <div class="card">
-        <h3>4. Metrics &amp; Concepts</h3>
-        <p class="muted small">Real Recall@K and Faithfulness scores (not illustrative numbers),
-          where the latency of your questions actually goes, and a glossary of the concepts this
-          demo uses — and a few it deliberately doesn't.</p>
-      </div>
-    </div>
-  </div>
-
-  <div class="landing-section">
-    <h2>Concepts you'll see in action</h2>
-    <div class="concept-list" id="landing-concept-list">
-      <div class="concept">
-        <h4>Chunking</h4>
-        <p>Documents are too long to embed or feed to an LLM whole, so they're split into
-          smaller, overlapping word windows — small enough for the embedding model, with enough
-          overlap that an answer never gets cut in half right at a chunk boundary.</p>
-      </div>
-      <div class="concept">
-        <h4>Embeddings</h4>
-        <p>A neural network turns each chunk (and later, your question) into a vector — a list of
-          numbers where texts with similar meaning end up close together in that space. That's
-          what lets search work by meaning instead of exact keywords.</p>
-      </div>
-      <div class="concept">
-        <h4>Cosine similarity &amp; top-K</h4>
-        <p>Your question's vector gets compared against every chunk's vector by the angle between
-          them (cosine similarity, -1 to 1). Only the K highest-scoring chunks are kept as
-          context — everything else is discarded, even chunks with a decent score.</p>
-      </div>
-      <div class="concept">
-        <h4>Prompt assembly</h4>
-        <p>The top-K chunks plus your question get assembled into one block of text sent to the
-          LLM, with instructions to answer only from that context and cite its source — so the
-          model can't quietly fall back on what it memorized during training.</p>
-      </div>
-      <div class="concept">
-        <h4>RAG vs fine-tuning</h4>
-        <p>Fine-tuning bakes new knowledge into the model's weights through additional training.
-          RAG keeps the model frozen and injects knowledge at request time instead — easier to
-          keep current (edit a document, rebuild the index) and every answer can cite an exact
-          source.</p>
-      </div>
-      <div class="concept">
-        <h4>Recall@K &amp; Faithfulness</h4>
-        <p>Recall@K asks whether the retriever found the right document at all. Faithfulness asks
-          whether the generated answer is actually supported by what it retrieved, or invented
-          something — graded by a second LLM call (LLM-as-a-judge).</p>
-      </div>
-    </div>
-  </div>
-
-  <div class="landing-cta-footer">
-    <button class="btn btn-primary btn-cta" data-start-demo-link>Start the demo →</button>
-  </div>
-</section>
-
-<div id="app-shell" hidden>
-
-<div id="byok-banner" class="byok-banner" hidden>
-  <label for="byok-key-input">Your OpenAI API key</label>
-  <input id="byok-key-input" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false" />
-  <button id="byok-save" class="btn-chip" type="button">Use this key</button>
-  <button id="byok-clear" class="btn-chip" type="button" hidden>Clear</button>
-  <span id="byok-status" class="muted small"></span>
-  <span class="info-icon" tabindex="0" data-tooltip="This public demo has no OpenAI key of its own — everything you can see for free (documents, chunks, the pre-built index, the code viewer, the last real evaluation run) was computed once and committed to the repo. Asking a brand-new question, rebuilding the index, or re-running the evaluation live calls the OpenAI API for real, so those need a key. It's kept only in this browser tab's sessionStorage, sent as a request header only on the request that needs it, and never logged or stored on the server. Get one at platform.openai.com/api-keys — using it here costs you fractions of a cent per question.">ⓘ</span>
-</div>
-
-<nav class="tabs">
-  <button class="tab-btn active" data-tab="init">1. Build the Index</button>
-  <button class="tab-btn" data-tab="ask">2. Ask a Question</button>
-  <button class="tab-btn" data-tab="explore">3. Explore the Data</button>
-  <button class="tab-btn" data-tab="metrics">4. Metrics &amp; Concepts</button>
-</nav>
-
-<main>
-  <!-- ======================= TAB: BUILD THE INDEX ======================= -->
-  <section id="tab-init" class="tab-panel active">
-    <p class="hint">
-      This runs the <strong>offline</strong> pipeline: it reads the knowledge-base documents,
-      splits them into overlapping fragments (chunks), turns each one into a vector
-      (<span class="term-tooltip" tabindex="0" data-tooltip="An embedding is a list of numbers (typically 1000+) produced by a neural network. Texts with similar meaning end up close together in that number-space — that's what lets us search by meaning instead of exact keywords.">embedding</span>)
-      with the OpenAI API, and saves everything to a vector index on disk. This runs once, or
-      whenever the documents change.
-    </p>
-
-    <details class="agent-note">
-      <summary>Why might a rebuilt index disappear on the public demo?
-      <p>If you're running this on your own machine, the server is a single long-lived process with
-        a writable disk — click "Build index" and every question you ask afterward uses the fresh
-        index immediately, saved to <code>index/</code> for next time too.</p>
-      <p>If you got here through the landing page's "Start the demo" button, your rebuild is
-        <strong>isolated to your own demo session</strong> — it never touches the shared index on
-        disk, and (when the public deployment has session storage configured) it's durable for 24
-        hours regardless of which serverless instance answers your next question, then it expires
-        automatically. That's a real guarantee, not best-effort.</p>
-      <p>Calling the API directly without a session (or on a deployment without session storage
-        configured) is different: the public deployment on Vercel runs as
-        <span class="term-tooltip" tabindex="0" data-tooltip="A function that only exists for the duration of one request (or a short-lived warm window afterward), instead of running continuously, with a read-only filesystem except for a temporary /tmp directory. Vercel may route your next request to a different instance with completely separate memory — nothing kept only in RAM on the first one is guaranteed to be there.">serverless functions</span>
-        with a read-only filesystem — so a rebuild there can't be saved to disk at all. Instead it
-        stays active <strong>in memory</strong> for that one server instance: your very next
-        question is likely to land on the same instance and see it (Vercel tends to reuse warm
-        instances under light traffic), but that's a best-effort, not a guarantee — a follow-up
-        question could land elsewhere and see the stable pre-built index instead. That's not a bug,
-        it's what "serverless" means; it's exactly why this demo also ships a pre-built index and a
-        <a href="#tab-metrics" data-tab-link="metrics">pre-computed evaluation snapshot</a> that
-        work regardless of which instance answers you.</p>
-    </details>
-
-    <div class="panel">
-      <div class="panel-row">
-        <button id="btn-ingest" class="btn btn-primary">Build index</button>
-        <span id="ingest-progress" class="progress-text"></span>
-      </div>
-      <p id="ingest-disabled-hint" class="muted small" hidden>
-        Paste your OpenAI API key above first.
+  <div class="hub-grid">
+    <a class="card hub-card" href="/RAG/">
+      <h3>RAG Live</h3>
+      <p class="muted small">
+        A real, runnable Retrieval-Augmented Generation pipeline: chunking, embeddings, vector
+        search, prompt assembly, and streamed generation — watched live, step by step. Includes a
+        Classic vs. Agentic RAG comparison, a measured Embeddings vs. keyword-search comparison,
+        and real Recall@K / Faithfulness evaluation metrics.
       </p>
-
-      <p class="muted small click-hint">Click any box below to see exactly what it produced.</p>
-      <div class="pipeline" id="pipeline-init">
-        <div class="pbox" data-box="documents" tabindex="0">
-          <div class="pbox-icon">📄</div>
-          <div class="pbox-label">Documents</div>
-          <div class="pbox-detail" data-detail="documents">—</div>
-        </div>
-        <div class="parrow">→</div>
-        <div class="pbox" data-box="chunking" tabindex="0">
-          <div class="pbox-icon">✂️</div>
-          <div class="pbox-label">Chunking
-            <span class="info-icon" tabindex="0" data-tooltip="Each document is split into overlapping word windows (180 words each, 40-word overlap here) so no chunk is too long for the embedding model, and no answer gets cut in half right at a chunk boundary.">ⓘ</span>
-          </div>
-          <div class="pbox-detail" data-detail="chunking">—</div>
-        </div>
-        <div class="parrow">→</div>
-        <div class="pbox" data-box="embeddings" tabindex="0">
-          <div class="pbox-icon">🧮</div>
-          <div class="pbox-label">Embeddings</div>
-          <div class="pbox-detail" data-detail="embeddings">—</div>
-        </div>
-        <div class="parrow">→</div>
-        <div class="pbox" data-box="index" tabindex="0">
-          <div class="pbox-icon">🗂️</div>
-          <div class="pbox-label">Index saved
-            <span class="info-icon" tabindex="0" data-tooltip="A vector store: a database specialized in storing vectors and finding the ones closest to a query vector — instead of matching exact keywords like a normal database.">ⓘ</span>
-          </div>
-          <div class="pbox-detail" data-detail="index">—</div>
-        </div>
+      <div class="hub-card-tags">
+        <span class="pill">Embeddings</span>
+        <span class="pill">Vector search</span>
+        <span class="pill">Agentic RAG</span>
+        <span class="pill">Evaluation</span>
       </div>
+      <span class="hub-card-cta">Open the demo →</span>
+    </a>
+  </div>
 
-      <div id="init-box-output" class="card box-output-card" hidden>
-        <h3>Output: <span class="box-output-title"></span></h3>
-        <div class="box-output-content"></div>
-      </div>
-
-      <div class="grid-2">
-        <div class="card">
-          <h3>Documents and their chunks</h3>
-          <div id="doc-list" class="doc-list">
-            <p class="muted">Documents will appear here once you start building the index.</p>
-          </div>
-        </div>
-        <div class="card">
-          <h3>Embedding batches</h3>
-          <div id="batch-list" class="batch-list">
-            <p class="muted">Each chunk is sent to the OpenAI API in batches of up to 100.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <details class="log-details" open>
-      <summary>Raw event log</summary>
-      <div id="log-init" class="event-log"></div>
-    </details>
-  </section>
-
-  <!-- ======================= TAB: ASK A QUESTION ======================= -->
-  <section id="tab-ask" class="tab-panel">
-    <p class="hint">
-      This runs the <strong>online</strong> pipeline: your question becomes a vector, gets
-      compared against every chunk in the index by
-      <span class="term-tooltip" tabindex="0" data-tooltip="Cosine similarity: a score from -1 to 1 measuring the angle between two vectors. 1 means they point in the same direction (very similar meaning), 0 means unrelated, -1 means opposite.">cosine similarity</span>,
-      the best matches (top-K) are assembled into a
-      <span class="term-tooltip" tabindex="0" data-tooltip="The final block of text actually sent to the LLM: your question plus the retrieved chunks as context, with instructions on how to answer.">prompt</span>,
-      and the LLM answers citing its source.
-    </p>
-
-    <div class="panel">
-      <div class="panel-row">
-        <input id="question-input" type="text" placeholder="Type your question (in Spanish — that's what the knowledge base is written in)…" autocomplete="off" />
-        <button id="btn-ask" class="btn btn-primary">Ask</button>
-      </div>
-      <p id="ask-disabled-hint" class="muted small" hidden>
-        Build the index first, in the "Build the Index" tab.
-      </p>
-
-      <div class="mode-tabs">
-        <button class="mode-btn active" data-mode="classic" type="button">Classic RAG</button>
-        <button class="mode-btn" data-mode="agentic" type="button">Agentic RAG</button>
-      </div>
-
-      <!-- ==================== MODE: CLASSIC RAG ==================== -->
-      <div id="ask-mode-classic" class="ask-mode-panel active">
-        <p class="muted small click-hint">Click any box below to see exactly what it produced.</p>
-        <div class="pipeline" id="pipeline-ask">
-          <div class="pbox" data-box="question" tabindex="0">
-            <div class="pbox-icon">❓</div>
-            <div class="pbox-label">Question</div>
-            <div class="pbox-detail" data-detail-ask="question">—</div>
-          </div>
-          <div class="parrow">→</div>
-          <div class="pbox" data-box="embedding" tabindex="0">
-            <div class="pbox-icon">🧮</div>
-            <div class="pbox-label">Embedding</div>
-            <div class="pbox-detail" data-detail-ask="embedding">—</div>
-          </div>
-          <div class="parrow">→</div>
-          <div class="pbox" data-box="search" tabindex="0">
-            <div class="pbox-icon">🔍</div>
-            <div class="pbox-label">Search</div>
-            <div class="pbox-detail" data-detail-ask="search">—</div>
-          </div>
-          <div class="parrow">→</div>
-          <div class="pbox" data-box="topk" tabindex="0">
-            <div class="pbox-icon">🏆</div>
-            <div class="pbox-label">Top-K
-              <span class="info-icon" tabindex="0" data-tooltip="Only the K highest-scoring chunks (K=4 by default) are kept as context — everything else is discarded, even chunks with a decent score.">ⓘ</span>
-            </div>
-            <div class="pbox-detail" data-detail-ask="topk">—</div>
-          </div>
-          <div class="parrow">→</div>
-          <div class="pbox" data-box="prompt" tabindex="0">
-            <div class="pbox-icon">📝</div>
-            <div class="pbox-label">Prompt</div>
-            <div class="pbox-detail" data-detail-ask="prompt">—</div>
-          </div>
-          <div class="parrow">→</div>
-          <div class="pbox" data-box="llm" tabindex="0">
-            <div class="pbox-icon">🤖</div>
-            <div class="pbox-label">LLM
-              <span class="info-icon" tabindex="0" data-tooltip="temperature=0 is used here, which makes the model deterministic — the same input reliably produces the same output. Good for a support bot that shouldn't improvise.">ⓘ</span>
-            </div>
-            <div class="pbox-detail" data-detail-ask="llm">—</div>
-          </div>
-          <div class="parrow">→</div>
-          <div class="pbox" data-box="answer" tabindex="0">
-            <div class="pbox-icon">💬</div>
-            <div class="pbox-label">Answer
-              <span class="info-icon" tabindex="0" data-tooltip="The answer streams in token by token as the model generates it (via OpenAI's streaming API), instead of waiting for the full response before showing anything.">ⓘ</span>
-            </div>
-            <div class="pbox-detail" data-detail-ask="answer">—</div>
-          </div>
-        </div>
-
-        <div id="ask-box-output" class="card box-output-card" hidden>
-          <h3>Output: <span class="box-output-title"></span></h3>
-          <div class="box-output-content"></div>
-        </div>
-
-        <details class="agent-note">
-          <summary>Is this an AI agent that iterates until it's "done"?</summary>
-          <p><strong>Not in this mode.</strong> The pipeline above runs top to bottom exactly once,
-            no loop-back: one embedding call, one search, one prompt, one generation call. The
-            model never decides to search again, ask a follow-up, or judge whether it has "enough"
-            context — that decision doesn't exist here. This is <strong>classic (non-agentic)
-            RAG</strong>.</p>
-          <p>It's built with the raw <span class="term-tooltip" tabindex="0" data-tooltip="No framework — just client.chat.completions.create() and client.embeddings.create() from the openai Python package. See src/rag.py and src/embeddings.py in the Explore tab's code viewer.">OpenAI Python SDK</span> —
-            <strong>no LangChain, no LangGraph</strong>, no agent framework of any kind.</p>
-          <p>Switch to <a href="#tab-ask" data-tab-link="ask" data-mode="agentic"><strong>Agentic
-            RAG</strong></a> above to see a real version of this: <code>retrieve()</code> exposed
-            as a <span class="term-tooltip" tabindex="0" data-tooltip="Giving an LLM a set of callable functions with typed arguments, so it can decide during generation which ones to call and with what input — e.g. OpenAI function calling / tool calling.">tool</span>
-            the model can call zero, one, or several times, deciding for itself when it has enough
-            information before answering (the
-            <span class="term-tooltip" tabindex="0" data-tooltip="Reason + Act: a prompting pattern where the model alternates between reasoning about what to do next and taking an action (like calling a tool), observing the result, and repeating — until it decides it's ready to give a final answer.">ReAct pattern</span>).
-            That trades predictability and cost for flexibility.</p>
-        </details>
-
-        <div class="card">
-          <h3>Your question, turned into a vector</h3>
-          <p class="muted small">
-            The embedding has <span id="embedding-dim">1536</span> dimensions — the first 32 are
-            shown here as a color strip by magnitude, just to make "it's a vector" tangible.
-          </p>
-          <div id="embedding-strip" class="embedding-strip"></div>
-        </div>
-
-        <div class="card">
-          <h3>Similarity against every chunk in the index</h3>
-          <p class="muted small">
-            Bar length = cosine similarity with your question. The highlighted ones are the top-K
-            picked to build the context — everything else gets discarded.
-          </p>
-          <div id="score-bars" class="score-bars">
-            <p class="muted">Scores will appear here as soon as they're computed.</p>
-          </div>
-        </div>
-
-        <div class="card">
-          <h3>Vector map — where your question landed
-            <span class="info-icon" tabindex="0" data-tooltip="Every chunk's real 1536-dimension vector is compressed down to 3 dimensions with PCA (principal component analysis) so it can be rendered in 3D. Distances here are a rough approximation of the real embedding space — useful for intuition, not the literal geometry the model uses. The exact number (real cosine similarity, no projection loss) is always shown when you hover or tap a point.">ⓘ</span>
-          </h3>
-          <p class="muted small">
-            Every sphere is a chunk in the index, positioned in the same 3D space as your question
-            (the gold sphere). The dashed lines connect it to the real top-K chunks — the ones
-            actually used as context — highlighted in blue. Hover any sphere for its exact
-            similarity (tap on touch devices, then use the button to make it the new reference
-            point — a fresh search from that chunk's own stored vector, no extra OpenAI call
-            needed). Drag to rotate, scroll or pinch to zoom, right-click-drag or two-finger-drag
-            to pan.
-          </p>
-          <div class="vector-map-toolbar">
-            <button id="vector-map-reset-view" class="btn-chip" type="button">Reset view</button>
-            <button id="vector-map-reset-ref" class="btn-chip" type="button" hidden>← Back to your question</button>
-            <span id="vector-map-ref-label" class="muted small"></span>
-          </div>
-          <div id="vector-map" class="vector-map">
-            <p class="muted">The map will appear here once a search runs.</p>
-          </div>
-          <div class="vector-map-legend">
-            <span><span class="legend-swatch legend-query"></span>reference point</span>
-            <span><span class="legend-swatch legend-topk"></span>top-K (used as context)</span>
-            <span><span class="legend-swatch legend-dot"></span>other chunks</span>
-          </div>
-        </div>
-
-        <div class="grid-2">
-          <div class="card">
-            <h3>The assembled prompt
-              <span class="info-icon" tabindex="0" data-tooltip="System prompt: instructions given to the LLM before the conversation starts, defining its role and constraints — here, 'only answer from the given context'.">ⓘ</span>
-            </h3>
-            <details id="prompt-details">
-              <summary>View full prompt (context + question)</summary>
-              <pre id="prompt-text" class="code-block"></pre>
-            </details>
-          </div>
-          <div class="card">
-            <h3>Assistant's answer</h3>
-            <div id="answer-text" class="answer-box">—</div>
-            <div id="sources-chips" class="chips"></div>
-          </div>
-        </div>
-
-        <details class="log-details">
-          <summary>Raw event log</summary>
-          <div id="log-ask" class="event-log"></div>
-        </details>
-      </div>
-
-      <!-- ==================== MODE: AGENTIC RAG ==================== -->
-      <div id="ask-mode-agentic" class="ask-mode-panel" hidden>
-        <p class="hint">
-          Same question, different pipeline: the model has a <code>retrieve_context</code> tool
-          and decides for itself — via native OpenAI tool calling, no LangChain/LangGraph — whether
-          to call it zero, one, or several times (reformulating the query in between) before it has
-          enough context to answer. Bounded at
-          <span id="agentic-max-iterations">4</span> iterations so it always terminates. Each call
-          fetches fewer chunks than Classic mode's top-K, on purpose — it's what actually gives the
-          model a reason to search again.
-        </p>
-        <div class="panel-row">
-          <button id="btn-agentic-example" class="btn-chip" type="button">Try a multi-part question →</button>
-        </div>
-
-        <div id="agentic-trace" class="agentic-trace">
-          <p class="muted">The step-by-step trace will appear here once you ask a question in this mode.</p>
-        </div>
-
-        <div class="grid-2">
-          <div class="card">
-            <h3>Assistant's answer</h3>
-            <div id="agentic-answer-text" class="answer-box">—</div>
-            <div id="agentic-sources-chips" class="chips"></div>
-          </div>
-          <div class="card">
-            <h3>Run summary</h3>
-            <div id="agentic-summary" class="muted small">Ask a question in this mode to see how many searches it took.</div>
-          </div>
-        </div>
-
-        <details class="log-details">
-          <summary>Raw event log</summary>
-          <div id="log-agentic" class="event-log"></div>
-        </details>
-      </div>
-
-      <!-- ==================== CLASSIC VS AGENTIC COMPARISON ==================== -->
-      <div id="ask-comparison" class="card ask-comparison" hidden>
-        <h3>Classic vs. Agentic — same question</h3>
-        <p class="muted small">
-          Appears once you've asked the exact same question in both modes.
-        </p>
-        <div id="ask-comparison-content"></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ======================= TAB: EXPLORE THE DATA ======================= -->
-  <section id="tab-explore" class="tab-panel">
-    <p class="hint">
-      Browse the raw material: pick a document, see exactly how it was cut into chunks
-      (including the overlap between them), and — once the index is built — inspect the real
-      vector stored for each chunk. Every code panel below shows the <strong>actual Python
-      source</strong> that ran, fetched live from the server, not a copy that can drift out of
-      sync.
-    </p>
-
-    <div class="panel">
-      <div class="card">
-        <h3>1. What's actually stored in "the database"
-          <span class="info-icon" tabindex="0" data-tooltip="There's no real database here — src/vector_store.py just writes two plain files: a NumPy array and a JSON list. This section shows exactly what's in them right now, read fresh from disk on every request.">ⓘ</span>
-        </h3>
-        <div id="db-summary"></div>
-      </div>
-
-      <div class="card">
-        <h3>2. Pick a document</h3>
-        <div id="explore-doc-picker" class="doc-picker"></div>
-      </div>
-
-      <div id="explore-doc-detail" class="card" hidden>
-        <h3>Document <span id="explore-doc-title"></span></h3>
-        <details>
-          <summary>View raw text</summary>
-          <pre id="explore-doc-text" class="code-block"></pre>
-        </details>
-      </div>
-
-      <div id="explore-chunks-card" class="card" hidden>
-        <h3>3. How it was split into chunks
-          <span class="info-icon" tabindex="0" data-tooltip="Computed live via chunking.chunk_spans() — the same function the real ingestion pipeline uses. Word ranges show exactly where each chunk starts and ends in the original document.">ⓘ</span>
-        </h3>
-        <div id="explore-chunks-list" class="chunk-list"></div>
-      </div>
-
-      <div class="card">
-        <h3>4. See the code
-          <span class="info-icon" tabindex="0" data-tooltip="Fetched live from the running server with Python's inspect.getsource() — this is guaranteed to be the exact code that produced everything you see on this page, not a hand-written copy.">ⓘ</span>
-        </h3>
-        <div class="code-picker" id="code-picker">
-          <button class="chip-btn active" data-code-key="chunking">Chunking</button>
-          <button class="chip-btn" data-code-key="embeddings">Embeddings</button>
-          <button class="chip-btn" data-code-key="vector_store_add">Storing vectors</button>
-          <button class="chip-btn" data-code-key="vector_store_search">Searching vectors</button>
-          <button class="chip-btn" data-code-key="prompt">Building the prompt</button>
-          <button class="chip-btn" data-code-key="agentic_loop">Agentic loop</button>
-        </div>
-        <div id="code-viewer" class="code-viewer"></div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ======================= TAB: METRICS & CONCEPTS ======================= -->
-  <section id="tab-metrics" class="tab-panel">
-    <p class="hint">
-      Real evaluation numbers for this exact index (not illustrative placeholders), the actual
-      latency of the questions you've asked this session, and a glossary of RAG/AI-engineering
-      concepts — including which ones this small demo deliberately doesn't need.
-    </p>
-
-    <div class="panel">
-      <div class="card">
-        <h3>Evaluation metrics
-          <span class="info-icon" tabindex="0" data-tooltip="Runs eval/evaluate.py's Recall@K and Faithfulness (LLM-as-judge) against the 10-question golden dataset — the same code the CLI uses (python -m eval.evaluate), just streamed live to this page.">ⓘ</span>
-        </h3>
-        <p class="muted small">
-          The tiles below show a real run of the 10-question golden dataset against this exact
-          index — either the snapshot committed to the repo, or a fresh live run if you click the
-          button (~30 real OpenAI API calls: 10 question embeddings + 10 answers + 10 judge
-          calls, takes roughly a minute, needs your own key on the public demo).
-        </p>
-        <p id="eval-source-label" class="muted small"></p>
-        <div class="panel-row">
-          <button id="btn-eval" class="btn btn-primary">Run evaluation live</button>
-          <span id="eval-progress" class="progress-text"></span>
-        </div>
-        <p id="eval-disabled-hint" class="muted small" hidden>
-          Build the index first, in the "Build the Index" tab.
-        </p>
-
-        <div class="grid-2" id="eval-scores">
-          <div class="metric-tile">
-            <div class="metric-value" id="metric-recall">—</div>
-            <div class="metric-label">Recall@K
-              <span class="info-icon" tabindex="0" data-tooltip="Of the 10 golden questions, what fraction had their expected source document among the top-K chunks retrieved? Measures the retriever, independent of the LLM.">ⓘ</span>
-            </div>
-          </div>
-          <div class="metric-tile">
-            <div class="metric-value" id="metric-faithfulness">—</div>
-            <div class="metric-label">Faithfulness
-              <span class="info-icon" tabindex="0" data-tooltip="Of the 10 generated answers, what fraction were judged (by a second LLM call) to be fully supported by the retrieved context, with nothing invented? Measures the generator, given whatever the retriever found.">ⓘ</span>
-            </div>
-            <div class="metric-derived" id="metric-hallucination"></div>
-          </div>
-        </div>
-
-        <div id="eval-recall-section" hidden>
-          <h4>Recall@K — per question</h4>
-          <div id="eval-recall-table"></div>
-        </div>
-        <div id="eval-faithfulness-section" hidden>
-          <h4>Faithfulness — per question</h4>
-          <div id="eval-faithfulness-table"></div>
-        </div>
-
-        <details class="log-details">
-          <summary>Raw event log</summary>
-          <div id="log-eval" class="event-log"></div>
-        </details>
-      </div>
-
-      <div class="card">
-        <h3>Embeddings vs. keyword search
-          <span class="info-icon" tabindex="0" data-tooltip="Runs evaluate_retrieval_comparison() from eval/evaluate.py: the same 10-question golden dataset, the same chunked index, through two retrievers — the real embeddings retriever, and a naive keyword-overlap baseline that does no embedding at all.">ⓘ</span>
-        </h3>
-        <p class="muted small">
-          Same questions, same index — the only thing that changes is how each chunk is scored:
-          cosine similarity between embedding vectors (semantic) vs. counting shared words after
-          dropping common Spanish stopwords (lexical, <code>src/keyword_retriever.py</code>). Rows
-          where they disagree are usually cases where the right document uses different words than
-          the question, or shares vocabulary with the wrong one.
-        </p>
-        <p id="compare-source-label" class="muted small"></p>
-        <div class="panel-row">
-          <button id="btn-compare" class="btn btn-primary">Run comparison live</button>
-          <span id="compare-progress" class="progress-text"></span>
-        </div>
-
-        <div class="grid-2" id="compare-scores">
-          <div class="metric-tile">
-            <div class="metric-value" id="metric-rag-recall">—</div>
-            <div class="metric-label">Recall@K — embeddings</div>
-          </div>
-          <div class="metric-tile">
-            <div class="metric-value" id="metric-keyword-recall">—</div>
-            <div class="metric-label">Recall@K — keyword search</div>
-          </div>
-        </div>
-
-        <div id="compare-table-section" hidden>
-          <h4>Per question</h4>
-          <div id="compare-table"></div>
-        </div>
-
-        <details class="log-details">
-          <summary>Raw event log</summary>
-          <div id="log-compare" class="event-log"></div>
-        </details>
-      </div>
-
-      <div class="card">
-        <h3>Where the time goes
-          <span class="info-icon" tabindex="0" data-tooltip="Real per-stage timings captured from the actual SSE events during your last question — not simulated. Ask a question in tab 2 to populate this.">ⓘ</span>
-        </h3>
-        <div id="latency-breakdown">
-          <p class="muted">No question asked yet this session — ask one in the "Ask a Question" tab.</p>
-        </div>
-        <div id="latency-distribution"></div>
-      </div>
-
-      <div class="card">
-        <h3>Concepts glossary</h3>
-        <div class="concept-list" id="concept-list">
-          <div class="concept">
-            <h4>RAG (Retrieval Augmented Generation)</h4>
-            <p>Instead of relying only on what the model memorized during training, RAG retrieves
-              relevant text from an external knowledge base at request time and feeds it to the
-              model as context before it answers. Every tab on this page demonstrates one half of
-              that: retrieval (Build the Index, Explore) and generation (Ask a Question).</p>
-          </div>
-          <div class="concept">
-            <h4>Chunking &amp; embedding model</h4>
-            <p>Documents are too long to embed or feed to an LLM whole, so they're split into
-              smaller, overlapping pieces (chunks), each turned into a vector by an embedding
-              model (<code>text-embedding-3-small</code> here). Chunk size and overlap are a real
-              design decision — see the Explore tab to see it happen on real documents.</p>
-          </div>
-          <div class="concept">
-            <h4>Golden dataset</h4>
-            <p>A hand-written set of representative questions paired with the source document each
-              one should retrieve, used to measure retrieval quality instead of guessing. This
-              demo's 10-question dataset lives in <code>eval/golden_dataset.json</code> and drives
-              the Recall@K score above.</p>
-          </div>
-          <div class="concept">
-            <h4>LLM-as-a-judge</h4>
-            <p>Using a second LLM call to grade the first one's output — here, checking whether a
-              generated answer is actually supported by the retrieved context or invented
-              something. Cheap and scales better than manual review, but imperfect: the judge can
-              be wrong too, especially on borderline cases.</p>
-          </div>
-          <div class="concept">
-            <h4>Fine-tuning vs RAG</h4>
-            <p>Fine-tuning bakes new knowledge into the model's weights through additional
-              training; RAG keeps the model frozen and injects knowledge at request time via
-              retrieval. This demo uses RAG because the knowledge base needs to stay trivially
-              editable (edit a markdown file, rebuild the index) and every answer needs to cite
-              its exact source — much harder to guarantee with fine-tuning.</p>
-          </div>
-          <div class="concept">
-            <h4>ReAct pattern (Reason + Act)</h4>
-            <p>A prompting pattern where the model alternates between reasoning about what to do
-              next, taking an action (like calling a tool), observing the result, and deciding
-              whether to act again or answer — repeating until <em>it</em> decides it has enough.
-              Used in this demo's <a href="#tab-ask" data-tab-link="ask" data-mode="agentic">Agentic
-              RAG mode</a> — ask something there and watch the trace.</p>
-          </div>
-          <div class="concept">
-            <h4>Tool calling in agents</h4>
-            <p>Giving an LLM a set of callable functions with typed arguments so it can decide
-              during generation which ones to invoke and with what input. This demo's
-              <a href="#tab-ask" data-tab-link="ask" data-mode="agentic">Agentic RAG mode</a> exposes
-              <code>retrieve()</code> as exactly this kind of tool — the model calls it on its own
-              terms, zero or more times, instead of it always running first unconditionally like in
-              Classic mode. Real source in <code>src/agentic_rag.py</code>, via the Explore tab's
-              code viewer.</p>
-          </div>
-        </div>
-
-        <p class="muted small not-covered-note">
-          <strong>Not covered here, and why</strong> — these are real, useful concepts, just not
-          ones a small local demo like this one has anything to compute:
-        </p>
-        <ul class="not-covered-list muted small">
-          <li><strong>DORA metrics</strong> (deployment frequency, lead time, change failure rate,
-            MTTR) measure software delivery performance for teams shipping continuously to
-            production — this demo has no CI/CD pipeline or deployment history.</li>
-          <li><strong>CodeScene / code ownership analysis</strong> mines git history across many
-            contributors to flag hotspots and knowledge silos in large, long-lived codebases —
-            this is a single-author educational project.</li>
-          <li><strong>EU AI Act high-risk classification</strong> is a legal framework for
-            classifying real production AI systems (a real healthtech assistant plausibly would
-            need it) — there's no live regulatory classification to compute for a local synthetic
-            demo with fake data.</li>
-        </ul>
-      </div>
-    </div>
-  </section>
+  <p class="muted small hub-more-note">More techniques will be added here over time.</p>
 </main>
 
-</div> <!-- #app-shell -->
+<footer class="hub-footer">
+  <p class="muted small">
+    Source on <a href="https://github.com/kyberis/rag-training" target="_blank" rel="noopener">GitHub</a>.
+  </p>
+</footer>
 
-<script src="/app.js"></script>
-
-<!-- 3D vector map — this project's one and only frontend dependency,
-     vendored locally (no CDN at runtime, no build step). The import map
-     must precede the module script below; order relative to the classic
-     app.js script above doesn't matter. -->
-<script type="importmap">
-{ "imports": { "three": "/vendor/three/three.module.js" } }
-</script>
-<script type="module" src="/vector-map-3d.js"></script>
 </body>
 </html>

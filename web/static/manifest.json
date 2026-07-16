@@ -2,7 +2,7 @@
   "name": "RAG Live — see how retrieval-augmented generation actually works",
   "short_name": "RAG Live",
   "description": "A real, runnable RAG pipeline you can watch step by step: chunking, embeddings, vector search, and how it compares to plain keyword search.",
-  "start_url": "/",
+  "start_url": "/RAG/",
   "display": "standalone",
   "background_color": "#0f1117",
   "theme_color": "#0f1117",

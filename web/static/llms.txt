@@ -1,16 +1,16 @@
-# RAG Live
+# Trefolio Learning
+
+> A hub of hands-on, runnable demos of AI/ML techniques. Every demo is real, inspectable code — not slides — meant to be watched step by step, not just described. The first (and currently only) demo is RAG Live, a real Retrieval-Augmented Generation pipeline.
+
+## RAG Live (/RAG)
 
 > A real, runnable Retrieval-Augmented Generation (RAG) system, built as an educational demo. It answers Spanish-language patient-support questions over a synthetic healthcare-booking knowledge base, and exposes every step of the pipeline — chunking, embeddings, vector search, prompt assembly, generation — live in the UI, with the actual source code browsable inline. No signup; the "Explore" and "Metrics" tabs work with zero API key.
-
-RAG Live is not a product pitch — it's a teaching artifact. Every claim it makes about how RAG works is backed by code you can inspect in the same page, and every metric it shows (Recall@K, Faithfulness, latency) is a real measurement against a committed snapshot, not a placeholder.
-
-## Core sections
 
 - [Live demo](https://learning.trefolio.com/RAG): the full interactive app — Build the Index, Ask a Question (Classic vs. Agentic RAG), Explore the Data, Metrics & Concepts.
 - [Source code (GitHub)](https://github.com/kyberis/rag-training): the complete, runnable project — Python backend (`src/`, `eval/`, `web/server.py`) and the plain HTML/CSS/JS frontend (`web/static/`), no framework, no build step.
 - [README](https://github.com/kyberis/rag-training/blob/main/README.md): a full written walkthrough of the design decisions — why each piece exists, not just what it does.
 
-## What this demo teaches, concretely
+What it teaches, concretely:
 
 - **Retrieval**: chunking with overlap, embeddings (`text-embedding-3-small`), a homemade numpy vector store with brute-force cosine similarity, top-K search.
 - **Generation**: prompt assembly with cited context, streamed token-by-token answers.
@@ -20,6 +20,6 @@ RAG Live is not a product pitch — it's a teaching artifact. Every claim it mak
 
 ## Notes for AI agents and crawlers
 
-- The interface and code comments are in English; the knowledge base and the assistant's own answers are in Spanish by design (`data/docplanner_kb/`) — this is a deliberate choice to demo a Spanish-language support bot, not a translation gap.
-- The knowledge base is synthetic content inspired by how a doctor-booking marketplace publicly works — it is not real internal documentation of any company.
-- Full page content is server-rendered static HTML (no client-side routing to crawl around); `robots.txt` at this same host allows all major search and AI crawlers.
+- The RAG Live interface and code comments are in English; its knowledge base and the assistant's own answers are in Spanish by design (`data/docplanner_kb/`) — this is a deliberate choice to demo a Spanish-language support bot, not a translation gap. The knowledge base is synthetic content, not real internal documentation of any company.
+- Page content across this site is server-rendered static HTML (no client-side routing to crawl around); `robots.txt` at this same host allows all major search and AI crawlers.
+- More technique demos will be added under this domain over time; this file will be updated as they land.

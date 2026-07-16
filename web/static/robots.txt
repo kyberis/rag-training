@@ -1,6 +1,7 @@
-# RAG Live — educational, open-source RAG demo (synthetic data, no PII).
-# Search engines and AI/LLM crawlers are both welcome: this site exists
-# to be read, learned from, and (for the code) reused.
+# Trefolio Learning — a hub of educational, open-source AI/ML technique
+# demos (starting with RAG Live, synthetic data, no PII). Search engines
+# and AI/LLM crawlers are both welcome: this site exists to be read,
+# learned from, and (for the code) reused.
 
 User-agent: *
 Allow: /
@@ -33,4 +34,4 @@ Allow: /
 User-agent: CCBot
 Allow: /
 
-Sitemap: https://learning.trefolio.com/RAG/sitemap.xml
+Sitemap: https://learning.trefolio.com/sitemap.xml

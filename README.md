@@ -1,6 +1,6 @@
 # RAG practice project — DocPlanner Support Assistant
 
-**Public demo, nothing to install: [rag-training.vercel.app](https://rag-training.vercel.app)** — documents, chunks, the index, the source code, and the last real evaluation run are browsable for free; to ask a brand-new question live or rebuild the index you'll need to paste your own OpenAI API key (see section 2.9, "why" and how it works).
+**Public demo, nothing to install: [learning.trefolio.com/RAG](https://learning.trefolio.com/RAG)** (also mirrored at [rag-training.vercel.app/RAG](https://rag-training.vercel.app/RAG)) — documents, chunks, the index, the source code, and the last real evaluation run are browsable for free; to ask a brand-new question live or rebuild the index you'll need to paste your own OpenAI API key (see section 2.9, "why" and how it works).
 
 This project is a real, runnable RAG (Retrieval Augmented Generation) system, built as a technical prep exercise. The use case is hypothetical: a support assistant that answers patient questions based on a synthetic knowledge base inspired by DocPlanner's public business model (a marketplace connecting patients with doctors, operating as ZnanyLekarz in Poland and Doctoralia in Spain/Latam, among other brands).
 
@@ -166,7 +166,7 @@ Under the hood, `src/ingest.py`, `src/retriever.py`, `src/rag.py`, `src/agentic_
 
 ### 2.9 Public demo on Vercel — who pays for the OpenAI calls
 
-The demo at [rag-training.vercel.app](https://rag-training.vercel.app) **does have its own OpenAI API key**, configured as an environment variable on Vercel (`OPENAI_API_KEY`), so anyone can try the live pipeline with zero setup friction. Since that key pays for every anonymous visitor's calls, it has two layers of protection:
+The demo at [learning.trefolio.com/RAG](https://learning.trefolio.com/RAG) **does have its own OpenAI API key**, configured as an environment variable on Vercel (`OPENAI_API_KEY`), so anyone can try the live pipeline with zero setup friction. Since that key pays for every anonymous visitor's calls, it has two layers of protection:
 
 - **Server-side rate limiting** (`_check_rate_limit()` in `web/server.py`): 5 free actions per IP per hour (ask / rebuild the index), 1 free live evaluation run per IP per day, and a shared budget of ~300 OpenAI calls per day across all visitors combined. This only applies when the request does *not* bring its own key — anyone who pastes theirs never runs into these limits, since they're spending their own money, not the demo's.
   - **Honest limit, not a cryptographic guarantee:** the counter lives in the process's memory, not a shared database. I confirmed in production that it does block sequential bursts from the same visitor (a 6th question in a row returns the limit error without spending anything), but a deliberate, parallel abuse spread across several serverless instances could exceed it — Vercel doesn't share memory between instances. For a small educational demo this is proportionate; it avoids adding an external dependency (Redis/Vercel KV) for a problem of this scale.
