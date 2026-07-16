@@ -4,7 +4,72 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>RAG Live — see how retrieval-augmented generation actually works</title>
+<meta name="description" content="A real, runnable RAG pipeline you can watch step by step: chunking, embeddings, vector search, prompt assembly, and streamed generation — plus a live comparison against plain keyword search, and real Recall@K / Faithfulness metrics. Free to explore, no signup." />
+<meta name="robots" content="index, follow" />
+<meta name="author" content="Marcos Suarez" />
+<link rel="canonical" href="https://learning.trefolio.com/RAG" />
+
+<!-- Open Graph / social previews -->
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="RAG Live" />
+<meta property="og:title" content="RAG Live — see how retrieval-augmented generation actually works" />
+<meta property="og:description" content="A real, runnable RAG pipeline you can watch step by step — embeddings, vector search, and why it beats plain keyword search. Real source code, real metrics, no signup." />
+<meta property="og:url" content="https://learning.trefolio.com/RAG" />
+<meta property="og:image" content="https://learning.trefolio.com/RAG/og-image.png" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:locale" content="en_US" />
+
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="RAG Live — see how retrieval-augmented generation actually works" />
+<meta name="twitter:description" content="A real, runnable RAG pipeline you can watch step by step — embeddings, vector search, and why it beats plain keyword search." />
+<meta name="twitter:image" content="https://learning.trefolio.com/RAG/og-image.png" />
+
+<!-- Icons / PWA -->
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+<link rel="manifest" href="/manifest.json" />
+<meta name="theme-color" content="#0f1117" />
+
 <link rel="stylesheet" href="/style.css" />
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": ["LearningResource", "WebApplication"],
+  "name": "RAG Live",
+  "headline": "RAG Live — see how retrieval-augmented generation actually works",
+  "description": "A real, runnable Retrieval-Augmented Generation (RAG) system built as an educational demo: chunking, embeddings, vector search, prompt assembly, and generation, all inspectable live, plus a measured comparison against a naive keyword-search baseline and real Recall@K / Faithfulness evaluation metrics.",
+  "url": "https://learning.trefolio.com/RAG",
+  "image": "https://learning.trefolio.com/RAG/og-image.png",
+  "inLanguage": "en",
+  "isAccessibleForFree": true,
+  "learningResourceType": "Interactive demo",
+  "educationalUse": "instruction",
+  "audience": {
+    "@type": "Audience",
+    "audienceType": "Software engineers and AI/ML practitioners learning RAG"
+  },
+  "teaches": [
+    "Retrieval-Augmented Generation (RAG)",
+    "Text chunking and overlap",
+    "Vector embeddings",
+    "Cosine similarity and vector search",
+    "Embeddings-based search vs. keyword search",
+    "Recall@K",
+    "LLM-as-a-judge / Faithfulness evaluation",
+    "ReAct agents and tool calling"
+  ],
+  "author": {
+    "@type": "Person",
+    "name": "Marcos Suarez"
+  },
+  "codeRepository": "https://github.com/kyberis/rag-training",
+  "isBasedOn": "https://github.com/kyberis/rag-training"
+}
+</script>
 </head>
 <body>
 <header class="topbar">

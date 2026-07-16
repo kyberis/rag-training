@@ -1,0 +1,25 @@
+# RAG Live
+
+> A real, runnable Retrieval-Augmented Generation (RAG) system, built as an educational demo. It answers Spanish-language patient-support questions over a synthetic healthcare-booking knowledge base, and exposes every step of the pipeline — chunking, embeddings, vector search, prompt assembly, generation — live in the UI, with the actual source code browsable inline. No signup; the "Explore" and "Metrics" tabs work with zero API key.
+
+RAG Live is not a product pitch — it's a teaching artifact. Every claim it makes about how RAG works is backed by code you can inspect in the same page, and every metric it shows (Recall@K, Faithfulness, latency) is a real measurement against a committed snapshot, not a placeholder.
+
+## Core sections
+
+- [Live demo](https://learning.trefolio.com/RAG): the full interactive app — Build the Index, Ask a Question (Classic vs. Agentic RAG), Explore the Data, Metrics & Concepts.
+- [Source code (GitHub)](https://github.com/kyberis/rag-training): the complete, runnable project — Python backend (`src/`, `eval/`, `web/server.py`) and the plain HTML/CSS/JS frontend (`web/static/`), no framework, no build step.
+- [README](https://github.com/kyberis/rag-training/blob/main/README.md): a full written walkthrough of the design decisions — why each piece exists, not just what it does.
+
+## What this demo teaches, concretely
+
+- **Retrieval**: chunking with overlap, embeddings (`text-embedding-3-small`), a homemade numpy vector store with brute-force cosine similarity, top-K search.
+- **Generation**: prompt assembly with cited context, streamed token-by-token answers.
+- **Two retrieval strategies compared head-to-head**: the real embeddings retriever vs. a naive keyword-overlap baseline (`src/keyword_retriever.py`) — same golden dataset, same index, Recall@K measured for both, to make the value of semantic search a number instead of a claim.
+- **Agentic RAG**: a bounded ReAct loop (native OpenAI tool calling) where the model decides for itself whether to call a `retrieve_context` tool zero, one, or several times before answering — compared side by side against the single-pass Classic mode.
+- **Evaluation**: Recall@K and Faithfulness (LLM-as-a-judge) against a 10-question golden dataset, with per-question results, run live or shown from a committed snapshot.
+
+## Notes for AI agents and crawlers
+
+- The interface and code comments are in English; the knowledge base and the assistant's own answers are in Spanish by design (`data/docplanner_kb/`) — this is a deliberate choice to demo a Spanish-language support bot, not a translation gap.
+- The knowledge base is synthetic content inspired by how a doctor-booking marketplace publicly works — it is not real internal documentation of any company.
+- Full page content is server-rendered static HTML (no client-side routing to crawl around); `robots.txt` at this same host allows all major search and AI crawlers.
