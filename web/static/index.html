@@ -607,6 +607,45 @@
       </div>
 
       <div class="card">
+        <h3>Embeddings vs. keyword search
+          <span class="info-icon" tabindex="0" data-tooltip="Runs evaluate_retrieval_comparison() from eval/evaluate.py: the same 10-question golden dataset, the same chunked index, through two retrievers — the real embeddings retriever, and a naive keyword-overlap baseline that does no embedding at all.">ⓘ</span>
+        </h3>
+        <p class="muted small">
+          Same questions, same index — the only thing that changes is how each chunk is scored:
+          cosine similarity between embedding vectors (semantic) vs. counting shared words after
+          dropping common Spanish stopwords (lexical, <code>src/keyword_retriever.py</code>). Rows
+          where they disagree are usually cases where the right document uses different words than
+          the question, or shares vocabulary with the wrong one.
+        </p>
+        <p id="compare-source-label" class="muted small"></p>
+        <div class="panel-row">
+          <button id="btn-compare" class="btn btn-primary">Run comparison live</button>
+          <span id="compare-progress" class="progress-text"></span>
+        </div>
+
+        <div class="grid-2" id="compare-scores">
+          <div class="metric-tile">
+            <div class="metric-value" id="metric-rag-recall">—</div>
+            <div class="metric-label">Recall@K — embeddings</div>
+          </div>
+          <div class="metric-tile">
+            <div class="metric-value" id="metric-keyword-recall">—</div>
+            <div class="metric-label">Recall@K — keyword search</div>
+          </div>
+        </div>
+
+        <div id="compare-table-section" hidden>
+          <h4>Per question</h4>
+          <div id="compare-table"></div>
+        </div>
+
+        <details class="log-details">
+          <summary>Raw event log</summary>
+          <div id="log-compare" class="event-log"></div>
+        </details>
+      </div>
+
+      <div class="card">
         <h3>Where the time goes
           <span class="info-icon" tabindex="0" data-tooltip="Real per-stage timings captured from the actual SSE events during your last question — not simulated. Ask a question in tab 2 to populate this.">ⓘ</span>
         </h3>

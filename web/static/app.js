@@ -1462,11 +1462,13 @@ function createResultsTable(container, headers) {
 }
 
 function appendResultRow(tbody, cells, okCell) {
+  const okCells = Array.isArray(okCell) ? okCell : okCell ? [okCell] : [];
   const tr = document.createElement("tr");
   cells.forEach((text, i) => {
     const td = document.createElement("td");
     td.textContent = text;
-    if (okCell && i === okCell.index) td.className = okCell.ok ? "eval-ok" : "eval-bad";
+    const match = okCells.find((oc) => oc.index === i);
+    if (match) td.className = match.ok ? "eval-ok" : "eval-bad";
     tr.appendChild(td);
   });
   tbody.appendChild(tr);
@@ -1609,6 +1611,112 @@ function runEvaluation() {
 
 $("#btn-eval").addEventListener("click", runEvaluation);
 loadEvalSnapshot();
+
+// ======================================================== COMPARE ======
+//
+// Runs eval/evaluate.py's evaluate_retrieval_comparison() — the same
+// Recall@K question set, run once through the real embeddings retriever
+// and once through a naive keyword-overlap baseline (no OpenAI calls),
+// so the gap between them is a measured number, not a claim.
+
+const COMPARE_TABLE_HEADERS = ["Question", "Expected", "Embeddings", "Keyword search"];
+
+function compareRowCells(item) {
+  return [
+    item.question,
+    item.expected_sources.join(", "),
+    item.rag_hit ? "hit" : "miss",
+    item.keyword_hit ? "hit" : "miss",
+  ];
+}
+
+function resetCompareUI() {
+  $("#compare-progress").textContent = "";
+  $("#metric-rag-recall").textContent = "—";
+  $("#metric-keyword-recall").textContent = "—";
+  $("#compare-table-section").hidden = true;
+  $("#compare-table").innerHTML = "";
+}
+
+async function loadCompareSnapshot() {
+  try {
+    const res = await fetch("/api/eval/snapshot");
+    if (!res.ok) return;
+    const snap = await res.json();
+    if (snap.rag_recall == null || snap.keyword_recall == null) {
+      $("#compare-source-label").textContent = "No snapshot committed yet — click \"Run comparison live\" below.";
+      return;
+    }
+    $("#metric-rag-recall").textContent = `${Math.round(snap.rag_recall * 100)}%`;
+    $("#metric-keyword-recall").textContent = `${Math.round(snap.keyword_recall * 100)}%`;
+    $("#compare-source-label").textContent =
+      `Snapshot computed ${fmtSnapshotDate(snap.generated_at)} against this exact index — committed to the repo, not live.`;
+
+    const tbody = createResultsTable($("#compare-table"), COMPARE_TABLE_HEADERS);
+    $("#compare-table-section").hidden = false;
+    (snap.compare_items || []).forEach((item) => {
+      appendResultRow(tbody, compareRowCells(item), [
+        { index: 2, ok: item.rag_hit },
+        { index: 3, ok: item.keyword_hit },
+      ]);
+    });
+  } catch (err) {
+    $("#compare-source-label").textContent = "Could not load the comparison snapshot.";
+  }
+}
+
+function runComparison() {
+  const btn = $("#btn-compare");
+  btn.disabled = true;
+  resetCompareUI();
+  $("#compare-source-label").textContent = "Running live against your own key…";
+  $("#compare-progress").textContent = "Running Recall@K for both retrievers…";
+
+  const tbody = createResultsTable($("#compare-table"), COMPARE_TABLE_HEADERS);
+  $("#compare-table-section").hidden = false;
+
+  const es = new FetchEventSource("/api/eval/compare/stream", { headers: authHeaders() });
+  const close = () => {
+    es.close();
+    btn.disabled = false;
+  };
+
+  es.addEventListener("compare_item", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-compare", "compare_item", payload);
+    appendResultRow(tbody, compareRowCells(payload), [
+      { index: 2, ok: payload.rag_hit },
+      { index: 3, ok: payload.keyword_hit },
+    ]);
+  });
+
+  es.addEventListener("compare_done", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-compare", "compare_done", payload);
+    $("#metric-rag-recall").textContent = `${Math.round(payload.rag_recall * 100)}%`;
+    $("#metric-keyword-recall").textContent = `${Math.round(payload.keyword_recall * 100)}%`;
+  });
+
+  es.addEventListener("pipeline_done", (e) => {
+    appendLog("log-compare", "pipeline_done", JSON.parse(e.data));
+    $("#compare-progress").textContent = "Done.";
+    $("#compare-source-label").textContent = "Live run — just now, against this exact index, with your key.";
+    close();
+  });
+
+  es.addEventListener("pipeline_error", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-compare", "pipeline_error", payload, true);
+    $("#compare-progress").textContent = `Error: ${payload.message}`;
+    $("#compare-source-label").textContent = "Live run failed — showing whatever loaded before the error.";
+    close();
+  });
+
+  es.onerror = () => close();
+}
+
+$("#btn-compare").addEventListener("click", runComparison);
+loadCompareSnapshot();
 
 // ----------------------------------------------------------- latency ------
 //

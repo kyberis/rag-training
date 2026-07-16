@@ -22,11 +22,16 @@ import json
 from datetime import datetime, timezone
 
 from src import config
-from .evaluate import evaluate_faithfulness, evaluate_recall_at_k, load_golden_dataset
+from .evaluate import (
+    evaluate_faithfulness,
+    evaluate_recall_at_k,
+    evaluate_retrieval_comparison,
+    load_golden_dataset,
+)
 
 
 def generate() -> dict:
-    events: dict[str, list] = {"recall_item": [], "faithfulness_item": []}
+    events: dict[str, list] = {"recall_item": [], "faithfulness_item": [], "compare_item": []}
 
     def on_event(name: str, payload: dict) -> None:
         if name in events:
@@ -37,6 +42,8 @@ def generate() -> dict:
     recall = evaluate_recall_at_k(golden, on_event=on_event)
     print("\n=== Evaluando Faithfulness (LLM-as-judge) ===")
     faithfulness = evaluate_faithfulness(golden, on_event=on_event)
+    print("\n=== Comparando embeddings vs. keyword search ===")
+    comparison = evaluate_retrieval_comparison(golden, on_event=on_event)
 
     snapshot = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -46,6 +53,9 @@ def generate() -> dict:
         "faithfulness": faithfulness,
         "recall_items": events["recall_item"],
         "faithfulness_items": events["faithfulness_item"],
+        "rag_recall": comparison["rag_recall"],
+        "keyword_recall": comparison["keyword_recall"],
+        "compare_items": events["compare_item"],
     }
     with open(config.RESULTS_SNAPSHOT_PATH, "w", encoding="utf-8") as f:
         json.dump(snapshot, f, ensure_ascii=False, indent=2)

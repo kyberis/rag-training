@@ -25,6 +25,7 @@ from openai import OpenAI
 
 from src import config
 from src.events import EventCallback, emit
+from src.keyword_retriever import retrieve_keyword
 from src.rag import answer
 from src.retriever import retrieve
 
@@ -80,6 +81,60 @@ def evaluate_recall_at_k(
     return recall
 
 
+def evaluate_retrieval_comparison(
+    golden: list[dict],
+    top_k: int | None = None,
+    on_event: EventCallback | None = None,
+    api_key: str | None = None,
+    session_id: str | None = None,
+) -> dict:
+    """Same Recall@K as evaluate_recall_at_k(), computed for both the real
+    embeddings retriever and a naive keyword-overlap baseline
+    (keyword_retriever.retrieve_keyword) on the exact same questions and
+    index — so the gap between them (if any) is a real, measured number,
+    not an illustrative claim. Powers the "Embeddings vs. keyword search"
+    card in the Metrics tab.
+    """
+    top_k = top_k or config.TOP_K
+    rag_hits = 0
+    keyword_hits = 0
+    for item in golden:
+        expected = set(item["expected_sources"])
+
+        rag_retrieved = retrieve(item["question"], top_k=top_k, api_key=api_key, session_id=session_id)
+        rag_sources = {c["source"] for c in rag_retrieved}
+        rag_hit = bool(expected & rag_sources)
+        rag_hits += int(rag_hit)
+
+        keyword_retrieved = retrieve_keyword(item["question"], top_k=top_k, session_id=session_id)
+        keyword_sources = {c["source"] for c in keyword_retrieved}
+        keyword_hit = bool(expected & keyword_sources)
+        keyword_hits += int(keyword_hit)
+
+        emit(
+            on_event,
+            "compare_item",
+            question=item["question"],
+            expected_sources=sorted(expected),
+            rag_hit=rag_hit,
+            rag_sources=sorted(rag_sources),
+            keyword_hit=keyword_hit,
+            keyword_sources=sorted(keyword_sources),
+        )
+
+    rag_recall = rag_hits / len(golden)
+    keyword_recall = keyword_hits / len(golden)
+    emit(
+        on_event,
+        "compare_done",
+        rag_recall=rag_recall,
+        keyword_recall=keyword_recall,
+        total=len(golden),
+        top_k=top_k,
+    )
+    return {"rag_recall": rag_recall, "keyword_recall": keyword_recall}
+
+
 def evaluate_faithfulness(
     golden: list[dict],
     on_event: EventCallback | None = None,
@@ -121,3 +176,5 @@ if __name__ == "__main__":
     evaluate_recall_at_k(golden)
     print("\n=== Evaluando Faithfulness (LLM-as-judge) ===")
     evaluate_faithfulness(golden)
+    print("\n=== Comparando embeddings vs. keyword search ===")
+    evaluate_retrieval_comparison(golden)

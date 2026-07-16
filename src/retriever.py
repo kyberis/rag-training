@@ -51,6 +51,14 @@ def _cache_put(session_id: str, entry: dict) -> None:
             _session_cache.popitem(last=False)
 
 
+def get_chunks(session_id: str | None = None) -> list[dict]:
+    """All indexed chunks' metadata (source, chunk_index, text), with no
+    vector search involved — the read-only access point used by retrieval
+    strategies that don't use embeddings (see keyword_retriever.py).
+    """
+    return _get_store(session_id).metadata
+
+
 def get_default_store() -> SimpleVectorStore:
     """The shared global index (the one living in index/vectors.npy), with
     no session involved. The only public access point to that store for

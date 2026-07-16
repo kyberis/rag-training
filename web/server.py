@@ -27,7 +27,12 @@ from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
-from eval.evaluate import evaluate_faithfulness, evaluate_recall_at_k, load_golden_dataset
+from eval.evaluate import (
+    evaluate_faithfulness,
+    evaluate_recall_at_k,
+    evaluate_retrieval_comparison,
+    load_golden_dataset,
+)
 from src import agentic_rag, chunking, config, embeddings, rag, vector_store
 from src.agentic_rag import answer_agentic
 from src.ingest import build_index, load_documents
@@ -119,6 +124,7 @@ _ASK_UNITS = 2                  # 1 embedding call + 1 chat completion call
 _AGENTIC_ASK_UNITS = 9          # worst case: up to 4 chat completions + up to 3+ embedding calls (bounded ReAct loop)
 _INGEST_UNITS = 1               # chunks are embedded in a single batch call
 _EVAL_UNITS = 30                # 10 embeddings + 10 answers + 10 judge calls
+_COMPARE_UNITS = 10             # 10 embeddings only — keyword search makes no OpenAI calls
 
 
 def _client_ip(request: Request) -> str:
@@ -456,6 +462,39 @@ def eval_stream(
         recall = evaluate_recall_at_k(golden, on_event=on_event, api_key=api_key, session_id=x_session_id)
         faithfulness = evaluate_faithfulness(golden, on_event=on_event, api_key=api_key, session_id=x_session_id)
         return {"recall": recall, "faithfulness": faithfulness}
+
+    return run_pipeline_as_sse(target)
+
+
+@app.get("/api/eval/compare/stream")
+def eval_compare_stream(
+    request: Request,
+    x_openai_key: str | None = Header(default=None, alias="X-OpenAI-Key"),
+    x_session_id: str | None = Header(default=None, alias="X-Session-Id"),
+):
+    """Runs Recall@K against the golden dataset twice: once through the real
+    embeddings retriever, once through a naive keyword-overlap baseline
+    (src/keyword_retriever.py) — same questions, same index, so the gap
+    between them is a measured number. ~10 OpenAI calls (question
+    embeddings only, the keyword side is free), shares the eval daily
+    free-run budget with /api/eval/stream. Already-computed results are in
+    /api/eval/snapshot if you don't want to spend your own key.
+    """
+    if not _has_usable_index(x_session_id):
+        return _immediate_error(
+            "No hay índice construido todavía. Andá a la pestaña 'Build the Index' y construilo primero."
+        )
+    if not x_openai_key:
+        limit_error = _check_rate_limit(request, units=_COMPARE_UNITS, is_eval=True)
+        if limit_error:
+            return _immediate_error(limit_error)
+    api_key = _resolve_api_key(x_openai_key)
+    if not api_key:
+        return _immediate_error(NO_KEY_MESSAGE)
+
+    def target(on_event):
+        golden = load_golden_dataset()
+        return evaluate_retrieval_comparison(golden, on_event=on_event, api_key=api_key, session_id=x_session_id)
 
     return run_pipeline_as_sse(target)
 
