@@ -13,7 +13,9 @@ per run would be pure waste, not a meaningful part of the demo.
 from __future__ import annotations
 
 import json
+import re
 import time
+from itertools import combinations
 
 from openai import OpenAI
 
@@ -21,6 +23,14 @@ from . import config
 from .events import EventCallback, emit
 from .rag import SYSTEM_PROMPT, _build_prompt
 from .retriever import retrieve
+
+_WORD_RE = re.compile(r"\w+", re.UNICODE)
+
+
+def _jaccard(a: str, b: str) -> float:
+    wa, wb = set(_WORD_RE.findall(a.lower())), set(_WORD_RE.findall(b.lower()))
+    union = wa | wb
+    return len(wa & wb) / len(union) if union else 1.0
 
 FEWSHOT_EXAMPLES: list[dict] = [
     {
@@ -127,55 +137,84 @@ def run_prompt_variants(
     return {"variants": results, "sources": sorted({c["source"] for c in chunks})}
 
 
+# Kept distinct from SYSTEM_PROMPT (rag.py): still grounded and still cites
+# sources, but asks for flowing prose instead of a numbered list. A rigid
+# list format leaves sampling almost no room to vary run over run — most
+# of the wording is dictated by the list structure itself, not by the
+# model's word-by-word choices — which is what made the very first version
+# of this demo look like temperature "did nothing." Prose gives the actual
+# sampling process visible surface area to differ on.
+TEMPERATURE_SYSTEM_PROMPT = SYSTEM_PROMPT + (
+    "\nRespondé en un párrafo de lenguaje natural y fluido, no en una lista numerada."
+)
+
+
 def run_temperature_playground(
     question: str,
     temperatures: list[float] | None = None,
+    n_samples: int | None = None,
     top_k: int | None = None,
     on_event: EventCallback | None = None,
     api_key: str | None = None,
     session_id: str | None = None,
 ) -> dict:
-    """Same context, same zero-shot prompt, run once per temperature value
-    — shows determinism-vs-creativity live instead of asserting it.
+    """Same context, same prompt, several samples per temperature value.
+
+    Temperature is a property of a *distribution* of outputs, not of any
+    single draw — one sample per value can't actually demonstrate it (a
+    lucky or unlucky single draw looks the same regardless of temperature).
+    Running several samples per temperature and measuring how much they
+    agree with each other (word-overlap / Jaccard similarity, the same
+    idiom as eval.evaluate.evaluate_consistency) makes determinism-vs-
+    diversity something you can see: agreement near 1.0 at temperature=0,
+    visibly lower at temperature=2 — a real measured number, not a claim
+    resting on eyeballing a single pair of paragraphs.
     """
     temperatures = temperatures if temperatures is not None else config.TEMPERATURE_PLAYGROUND_VALUES
+    n_samples = n_samples or config.TEMPERATURE_SAMPLES
     chunks = retrieve(question, top_k=top_k, on_event=on_event, api_key=api_key, session_id=session_id)
     if not chunks:
         emit(on_event, "no_context")
-        return {"runs": []}
+        return {"temperatures": []}
 
     client = OpenAI(api_key=api_key or config.OPENAI_API_KEY)
     prompt = _build_prompt(question, chunks)
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": TEMPERATURE_SYSTEM_PROMPT},
         {"role": "user", "content": prompt},
     ]
 
-    runs = []
+    results = []
     for temperature in temperatures:
-        key = str(temperature)
-        emit(on_event, "temp_start", temperature=temperature)
+        emit(on_event, "temp_start", temperature=temperature, n_samples=n_samples)
         t0 = time.time()
-        if on_event is None:
+        samples = []
+        for i in range(n_samples):
             response = client.chat.completions.create(
-                model=config.CHAT_MODEL, messages=messages, temperature=temperature
+                model=config.CHAT_MODEL,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=config.TEMPERATURE_MAX_TOKENS,
             )
-            full_answer = response.choices[0].message.content
-        else:
-            stream = client.chat.completions.create(
-                model=config.CHAT_MODEL, messages=messages, temperature=temperature, stream=True
-            )
-            parts: list[str] = []
-            for chunk in stream:
-                delta = chunk.choices[0].delta.content
-                if delta:
-                    parts.append(delta)
-                    emit(on_event, "temp_token", temperature=temperature, delta=delta)
-            full_answer = "".join(parts)
-        emit(on_event, "temp_done", temperature=temperature, answer=full_answer, elapsed_ms=int((time.time() - t0) * 1000))
-        runs.append({"temperature": temperature, "answer": full_answer})
+            answer = response.choices[0].message.content
+            samples.append(answer)
+            emit(on_event, "temp_sample_done", temperature=temperature, sample_index=i, answer=answer)
 
-    return {"runs": runs, "sources": sorted({c["source"] for c in chunks})}
+        pairs = list(combinations(range(len(samples)), 2))
+        jaccard_scores = [_jaccard(samples[i], samples[j]) for i, j in pairs]
+        avg_jaccard = sum(jaccard_scores) / len(jaccard_scores) if jaccard_scores else 1.0
+
+        emit(
+            on_event,
+            "temp_summary",
+            temperature=temperature,
+            avg_jaccard_similarity=avg_jaccard,
+            n_samples=n_samples,
+            elapsed_ms=int((time.time() - t0) * 1000),
+        )
+        results.append({"temperature": temperature, "samples": samples, "avg_jaccard_similarity": avg_jaccard})
+
+    return {"temperatures": results, "sources": sorted({c["source"] for c in chunks})}
 
 
 # --------------------------------------------------------- structured output --

@@ -41,7 +41,21 @@ AGENTIC_MAX_ITERATIONS = 4  # hard cap; the last turn forces tool_choice="none" 
 
 # --- Prompting Lab parameters (see src/prompting_lab.py) ---
 PROMPT_FEWSHOT_EXAMPLES = 2                   # how many Q&A examples to prepend in the few-shot variant
-TEMPERATURE_PLAYGROUND_VALUES = [0.0, 0.7, 1.2]  # deterministic -> creative
+# 0.0 -> 2.0 is OpenAI's full range; a narrower spread (e.g. 0.0/0.7/1.2)
+# made the demo's own point invisible — see TEMPERATURE_SAMPLES below for
+# why a wide spread alone still isn't enough on its own.
+TEMPERATURE_PLAYGROUND_VALUES = [0.0, 1.0, 2.0]
+# Temperature is a property of a *distribution*, not of one draw — a single
+# sample per value can't show it (a lucky/unlucky draw looks the same
+# either way). Several samples per temperature, compared to each other,
+# make the determinism-vs-diversity effect a measured number instead of a
+# claim resting on one paragraph "looking" different.
+TEMPERATURE_SAMPLES = 3
+# High temperature has a known failure mode: without a cap, generation can
+# run long (repetitive/rambling continuations) instead of just being
+# differently-worded — a real latency/cost risk for a public demo, not a
+# theoretical one. Capped short since these are single-paragraph answers.
+TEMPERATURE_MAX_TOKENS = 300
 STRUCTURED_OUTPUT_SCHEMA_NAME = "docplanner_answer"
 
 # --- Reranker parameters (see src/reranker.py) ---

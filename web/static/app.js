@@ -234,6 +234,12 @@ function runPromptVariants() {
 
 $("#btn-prompting-variants").addEventListener("click", runPromptVariants);
 
+// Temperature is a property of a *distribution*, not of a single draw —
+// one sample per value can't show it (a lucky/unlucky single draw looks
+// the same regardless of temperature). Each temperature card shows every
+// sample plus how much they agree with each other (word-overlap Jaccard,
+// same idiom as the Consistency card in Metrics): near 100% at
+// temperature=0 (deterministic), visibly lower at temperature=2.
 function runTemperaturePlayground() {
   const question = $("#prompting-temperature-input").value.trim();
   if (!question) return;
@@ -247,25 +253,48 @@ function runTemperaturePlayground() {
   const es = new FetchEventSource(url, { headers: authHeaders() });
   const close = () => { es.close(); btn.disabled = false; checkStatus(); };
 
-  function boxFor(temperature) {
+  function cardFor(temperature, nSamples) {
     const id = `prompting-temp-${String(temperature).replace(".", "_")}`;
-    let box = $(`#${id}`);
-    if (!box) {
-      const card = document.createElement("div");
+    let card = $(`#${id}`);
+    if (!card) {
+      card = document.createElement("div");
       card.className = "card";
-      card.innerHTML = `<h3>temperature = ${temperature}</h3><div class="answer-box" id="${id}"></div>`;
+      card.id = id;
+      let samplesHtml = "";
+      for (let i = 0; i < nSamples; i++) {
+        samplesHtml += `<div class="temp-sample muted small" id="${id}-sample-${i}">Waiting…</div>`;
+      }
+      card.innerHTML =
+        `<h3>temperature = ${temperature}</h3>` +
+        `<div class="temp-samples">${samplesHtml}</div>` +
+        `<p class="temp-agreement muted small" id="${id}-agreement"></p>`;
       grid.appendChild(card);
-      box = $(`#${id}`);
     }
-    return box;
+    return card;
   }
 
   es.addEventListener("temp_start", (e) => {
-    boxFor(JSON.parse(e.data).temperature);
-  });
-  es.addEventListener("temp_token", (e) => {
     const payload = JSON.parse(e.data);
-    boxFor(payload.temperature).textContent += payload.delta;
+    cardFor(payload.temperature, payload.n_samples);
+  });
+  es.addEventListener("temp_sample_done", (e) => {
+    const payload = JSON.parse(e.data);
+    const id = `prompting-temp-${String(payload.temperature).replace(".", "_")}`;
+    const el = $(`#${id}-sample-${payload.sample_index}`);
+    if (el) {
+      el.textContent = `Sample ${payload.sample_index + 1}: ${payload.answer}`;
+      el.classList.remove("muted");
+    }
+  });
+  es.addEventListener("temp_summary", (e) => {
+    const payload = JSON.parse(e.data);
+    const id = `prompting-temp-${String(payload.temperature).replace(".", "_")}`;
+    const el = $(`#${id}-agreement`);
+    if (el) {
+      const pct = Math.round(payload.avg_jaccard_similarity * 100);
+      el.textContent = `Agreement across ${payload.n_samples} samples: ${pct}% word-overlap ` +
+        (pct >= 90 ? "(near-identical — low temperature stays consistent)" : "(visibly diverging)");
+    }
   });
   es.addEventListener("no_context", () => {
     grid.innerHTML = '<p class="muted">No relevant information found in the knowledge base.</p>';

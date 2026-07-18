@@ -643,8 +643,14 @@
           Build the index first, in the "Build the Index" tab.
         </p>
         <p class="muted small">
-          Same question, same prompt, run once per temperature value — determinism vs. creativity,
-          live instead of asserted.
+          Temperature is a property of a <em>distribution</em> of outputs, not of any single
+          answer — one sample per value can't actually show it (a lucky or unlucky single draw
+          looks the same either way). So each temperature runs <strong>3 samples</strong> of the
+          same prompt, and shows how much they agree with each other (word-overlap) — near 100%
+          at temperature&nbsp;0 (deterministic), visibly lower as it climbs toward 2. At the
+          extreme end (temperature&nbsp;2, OpenAI's max) don't be surprised to see a sample turn
+          genuinely incoherent — that's not a bug in this demo, it's temperature's real failure
+          mode, shown rather than described.
         </p>
         <div class="grid-3" id="prompting-temperature-grid"></div>
       </div>

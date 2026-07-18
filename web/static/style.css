@@ -404,6 +404,16 @@ main { padding: 0 1.5rem 3rem; max-width: 1100px; margin: 0 auto; }
   font-size: 0.92rem;
 }
 
+.temp-samples { display: flex; flex-direction: column; gap: 0.6rem; }
+.temp-sample {
+  white-space: pre-wrap;
+  font-size: 0.85rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px dashed var(--border);
+}
+.temp-sample:last-child { border-bottom: none; }
+.temp-agreement { margin-top: 0.6rem; border-top: 1px solid var(--border); padding-top: 0.6rem; }
+
 .chips { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.6rem; }
 .chip {
   background: var(--accent-soft);
