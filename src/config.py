@@ -13,6 +13,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# --- Tokenizer cache (see src/tokenizer_demo.py) ---
+# tiktoken downloads its BPE vocab from a remote blob on first use by
+# default, which doesn't work on Vercel's read-only filesystem. The vocab
+# for o200k_base is pre-fetched once and committed under vendor/, and this
+# env var must be set before tiktoken is ever imported (same "set env
+# before first use" idiom as load_dotenv() above).
+TIKTOKEN_CACHE_DIR = Path(__file__).resolve().parent.parent / "vendor" / "tiktoken_cache"
+os.environ["TIKTOKEN_CACHE_DIR"] = str(TIKTOKEN_CACHE_DIR)
+TOKENIZER_ENCODING_NAME = os.getenv("TOKENIZER_ENCODING_NAME", "o200k_base")
+
 # --- Keys and models ---
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
@@ -28,6 +38,18 @@ TOP_K = 4                  # how many chunks are retrieved per question
 # --- Agentic RAG parameters (see src/agentic_rag.py) ---
 AGENTIC_TOP_K = 2           # smaller than TOP_K: gives the model a real reason to search again
 AGENTIC_MAX_ITERATIONS = 4  # hard cap; the last turn forces tool_choice="none" so it always ends with an answer
+
+# --- Prompting Lab parameters (see src/prompting_lab.py) ---
+PROMPT_FEWSHOT_EXAMPLES = 2                   # how many Q&A examples to prepend in the few-shot variant
+TEMPERATURE_PLAYGROUND_VALUES = [0.0, 0.7, 1.2]  # deterministic -> creative
+STRUCTURED_OUTPUT_SCHEMA_NAME = "docplanner_answer"
+
+# --- Reranker parameters (see src/reranker.py) ---
+# Must be > TOP_K: both the "with reranking" and "without" comparison take
+# the same 8-candidate pool and only differ in what happens to it, so the
+# comparison isolates the reranker's actual effect instead of comparing
+# against a smaller, different candidate set.
+RERANK_CANDIDATES = 8
 
 # --- Paths ---
 BASE_DIR = Path(__file__).resolve().parent.parent

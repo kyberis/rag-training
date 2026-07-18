@@ -113,6 +113,7 @@ class FetchEventSource extends EventTarget {
 // ---------------------------------------------------------------- tabs ----
 
 let exploreCodeInitialized = false;
+let trainingInitialized = false;
 
 function switchToTab(tabName) {
   const btn = $(`.tab-btn[data-tab="${tabName}"]`);
@@ -132,7 +133,12 @@ function switchToTab(tabName) {
     if (!exploreCodeInitialized) {
       exploreCodeInitialized = true;
       loadCodeSnippet("chunking"); // code never changes at runtime — fetch once, cache
+      runTokenizer(); // seed with the textarea's default example text
     }
+  }
+  if (tabName === "training" && !trainingInitialized) {
+    trainingInitialized = true;
+    loadFinetuneExamples(); // zero-cost, no key needed — fetch once
   }
 }
 
@@ -159,16 +165,333 @@ let askMode = "classic"; // "classic" | "agentic"
 
 function setAskMode(mode) {
   askMode = mode;
-  $$(".mode-btn").forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
+  $$(".mode-btn", $("#tab-ask")).forEach((b) => b.classList.toggle("active", b.dataset.mode === mode));
   $("#ask-mode-classic").classList.toggle("active", mode === "classic");
   $("#ask-mode-classic").hidden = mode !== "classic";
   $("#ask-mode-agentic").classList.toggle("active", mode === "agentic");
   $("#ask-mode-agentic").hidden = mode !== "agentic";
 }
 
-$$(".mode-btn").forEach((btn) => {
+$$(".mode-btn", $("#tab-ask")).forEach((btn) => {
   btn.addEventListener("click", () => setAskMode(btn.dataset.mode));
 });
+
+// ---------------------------------------------------- prompting lab tabs --
+//
+// Same active/hidden idiom as setAskMode above, scoped to #tab-prompting
+// instead — see that function's comment for why the selector must be
+// scoped rather than global.
+
+function setPromptMode(mode) {
+  $$(".mode-btn", $("#tab-prompting")).forEach((b) => b.classList.toggle("active", b.dataset.promptMode === mode));
+  ["variants", "temperature", "structured"].forEach((m) => {
+    const panel = $(`#prompting-mode-${m}`);
+    panel.classList.toggle("active", m === mode);
+    panel.hidden = m !== mode;
+  });
+}
+
+$$(".mode-btn", $("#tab-prompting")).forEach((btn) => {
+  btn.addEventListener("click", () => setPromptMode(btn.dataset.promptMode));
+});
+
+function runPromptVariants() {
+  const question = $("#prompting-variants-input").value.trim();
+  if (!question) return;
+  const btn = $("#btn-prompting-variants");
+  btn.disabled = true;
+  const t0 = performance.now();
+  ["zero_shot", "few_shot", "cot"].forEach((v) => {
+    $(`#prompting-variant-${v}`).textContent = "";
+  });
+
+  const url = `/api/prompting/variants/stream?question=${encodeURIComponent(question)}`;
+  const es = new FetchEventSource(url, { headers: authHeaders() });
+  const close = () => { es.close(); btn.disabled = false; checkStatus(); };
+
+  es.addEventListener("variant_token", (e) => {
+    const payload = JSON.parse(e.data);
+    $(`#prompting-variant-${payload.variant}`).textContent += payload.delta;
+  });
+  es.addEventListener("no_context", () => {
+    ["zero_shot", "few_shot", "cot"].forEach((v) => {
+      $(`#prompting-variant-${v}`).textContent = "No relevant information found in the knowledge base.";
+    });
+  });
+  es.addEventListener("pipeline_error", (e) => {
+    const payload = JSON.parse(e.data);
+    ["zero_shot", "few_shot", "cot"].forEach((v) => {
+      if (!$(`#prompting-variant-${v}`).textContent) $(`#prompting-variant-${v}`).textContent = `Error: ${payload.message}`;
+    });
+    close();
+  });
+  es.addEventListener("pipeline_done", () => {
+    recordTechniqueLatency("prompting_variants", Math.round(performance.now() - t0));
+    close();
+  });
+  es.onerror = () => close();
+}
+
+$("#btn-prompting-variants").addEventListener("click", runPromptVariants);
+
+function runTemperaturePlayground() {
+  const question = $("#prompting-temperature-input").value.trim();
+  if (!question) return;
+  const btn = $("#btn-prompting-temperature");
+  btn.disabled = true;
+  const t0 = performance.now();
+  const grid = $("#prompting-temperature-grid");
+  grid.innerHTML = "";
+
+  const url = `/api/prompting/temperature/stream?question=${encodeURIComponent(question)}`;
+  const es = new FetchEventSource(url, { headers: authHeaders() });
+  const close = () => { es.close(); btn.disabled = false; checkStatus(); };
+
+  function boxFor(temperature) {
+    const id = `prompting-temp-${String(temperature).replace(".", "_")}`;
+    let box = $(`#${id}`);
+    if (!box) {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.innerHTML = `<h3>temperature = ${temperature}</h3><div class="answer-box" id="${id}"></div>`;
+      grid.appendChild(card);
+      box = $(`#${id}`);
+    }
+    return box;
+  }
+
+  es.addEventListener("temp_start", (e) => {
+    boxFor(JSON.parse(e.data).temperature);
+  });
+  es.addEventListener("temp_token", (e) => {
+    const payload = JSON.parse(e.data);
+    boxFor(payload.temperature).textContent += payload.delta;
+  });
+  es.addEventListener("no_context", () => {
+    grid.innerHTML = '<p class="muted">No relevant information found in the knowledge base.</p>';
+  });
+  es.addEventListener("pipeline_error", (e) => {
+    const payload = JSON.parse(e.data);
+    grid.innerHTML = `<p class="muted">Error: ${payload.message}</p>`;
+    close();
+  });
+  es.addEventListener("pipeline_done", () => {
+    recordTechniqueLatency("prompting_temperature", Math.round(performance.now() - t0));
+    close();
+  });
+  es.onerror = () => close();
+}
+
+$("#btn-prompting-temperature").addEventListener("click", runTemperaturePlayground);
+
+async function runStructuredOutput() {
+  const question = $("#prompting-structured-input").value.trim();
+  if (!question) return;
+  const btn = $("#btn-prompting-structured");
+  const structuredEl = $("#prompting-structured-result");
+  const freetextEl = $("#prompting-freetext-result");
+  btn.disabled = true;
+  structuredEl.textContent = "Running…";
+  freetextEl.textContent = "Running…";
+  const t0 = performance.now();
+
+  try {
+    const res = await fetch(`/api/prompting/structured?question=${encodeURIComponent(question)}`, {
+      headers: authHeaders(),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+      structuredEl.textContent = `Error: ${err.detail}`;
+      freetextEl.textContent = "";
+      return;
+    }
+    const data = await res.json();
+    if (!data.structured) {
+      structuredEl.textContent = "No relevant information found in the knowledge base.";
+      freetextEl.textContent = "";
+      return;
+    }
+    const problems = data.structured.problems;
+    const validationLine = problems.length
+      ? `⚠ Schema validation failed: ${problems.join(" ")}`
+      : "✓ Schema validation passed.";
+    structuredEl.innerHTML =
+      `<pre class="code-block">${JSON.stringify(data.structured.payload, null, 2)}</pre>` +
+      `<p class="muted small">${validationLine}</p>`;
+    freetextEl.textContent = data.freetext.answer;
+    recordTechniqueLatency("prompting_structured", Math.round(performance.now() - t0));
+  } catch (err) {
+    structuredEl.textContent = "Could not run this comparison.";
+    freetextEl.textContent = "";
+  } finally {
+    btn.disabled = false;
+    checkStatus();
+  }
+}
+
+$("#btn-prompting-structured").addEventListener("click", runStructuredOutput);
+
+// -------------------------------------------------------------- training --
+
+function setTrainingMode(mode) {
+  $$(".mode-btn", $("#tab-training")).forEach((b) => b.classList.toggle("active", b.dataset.trainingMode === mode));
+  ["finetune", "classifier"].forEach((m) => {
+    const panel = $(`#training-mode-${m}`);
+    panel.classList.toggle("active", m === mode);
+    panel.hidden = m !== mode;
+  });
+}
+
+$$(".mode-btn", $("#tab-training")).forEach((btn) => {
+  btn.addEventListener("click", () => setTrainingMode(btn.dataset.trainingMode));
+});
+
+async function loadFinetuneExamples() {
+  const container = $("#finetune-examples");
+  try {
+    const res = await fetch("/api/training/finetune-example");
+    const examples = await res.json();
+    container.innerHTML = "";
+    examples.forEach((ex) => {
+      const details = document.createElement("details");
+      const summary = document.createElement("summary");
+      summary.textContent = `${ex.record.messages[1].content} (source: ${ex.source_document})`;
+      const pre = document.createElement("pre");
+      pre.className = "code-block";
+      pre.textContent = JSON.stringify(ex.record, null, 2);
+      details.appendChild(summary);
+      details.appendChild(pre);
+      container.appendChild(details);
+    });
+  } catch (err) {
+    container.innerHTML = '<p class="muted">Could not load the fine-tuning examples.</p>';
+  }
+}
+
+async function trainClassifier() {
+  const btn = $("#btn-classifier-train");
+  const result = $("#classifier-train-result");
+  btn.disabled = true;
+  result.innerHTML = "<p class=\"muted\">Training…</p>";
+  try {
+    const res = await fetch("/api/training/classifier/train", { headers: authHeaders() });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+      result.innerHTML = `<p class="muted">${err.detail}</p>`;
+      return;
+    }
+    const data = await res.json();
+    const counts = data.labels.map((l) => `${l}: ${data.n_examples_per_label[l]} chunks`).join(", ");
+    const avgSeparation =
+      data.centroid_separation.reduce((sum, p) => sum + p.cosine_similarity, 0) / data.centroid_separation.length;
+    result.innerHTML =
+      `<p class="small">Trained ${data.labels.length} centroids (one per document): ${counts}</p>` +
+      `<p class="muted small">Average pairwise cosine similarity between centroids: ${avgSeparation.toFixed(3)} ` +
+      `— the closer to 1.0, the harder the classes are to tell apart with this little data per class.</p>`;
+  } catch (err) {
+    result.innerHTML = '<p class="muted">Could not train the classifier.</p>';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+$("#btn-classifier-train").addEventListener("click", trainClassifier);
+
+const CLASSIFIER_COMPARE_TABLE_HEADERS = ["Question", "Expected", "Classifier prediction", "RAG top-1"];
+
+function classifierCompareRowCells(item) {
+  return [item.question, item.expected_sources.join(", "), item.classifier_prediction, item.rag_top1];
+}
+
+function resetClassifierCompareUI() {
+  $("#classifier-compare-progress").textContent = "";
+  $("#metric-classifier-accuracy").textContent = "—";
+  $("#metric-rag-top1-accuracy").textContent = "—";
+  $("#classifier-compare-table-section").hidden = true;
+  $("#classifier-compare-table").innerHTML = "";
+}
+
+async function loadClassifierCompareSnapshot() {
+  try {
+    const res = await fetch("/api/eval/snapshot");
+    if (!res.ok) return;
+    const snap = await res.json();
+    if (snap.classifier_accuracy == null || snap.rag_top1_accuracy == null) {
+      $("#classifier-compare-source-label").textContent = "No snapshot committed yet — click \"Run comparison live\" below.";
+      return;
+    }
+    $("#metric-classifier-accuracy").textContent = `${Math.round(snap.classifier_accuracy * 100)}%`;
+    $("#metric-rag-top1-accuracy").textContent = `${Math.round(snap.rag_top1_accuracy * 100)}%`;
+    $("#classifier-compare-source-label").textContent =
+      `Snapshot computed ${fmtSnapshotDate(snap.generated_at)} against this exact index — committed to the repo, not live.`;
+
+    const tbody = createResultsTable($("#classifier-compare-table"), CLASSIFIER_COMPARE_TABLE_HEADERS);
+    $("#classifier-compare-table-section").hidden = false;
+    (snap.classifier_items || []).forEach((item) => {
+      appendResultRow(tbody, classifierCompareRowCells(item), [
+        { index: 2, ok: item.classifier_hit },
+        { index: 3, ok: item.rag_hit },
+      ]);
+    });
+  } catch (err) {
+    $("#classifier-compare-source-label").textContent = "Could not load the comparison snapshot.";
+  }
+}
+
+function runClassifierComparison() {
+  const btn = $("#btn-classifier-compare");
+  btn.disabled = true;
+  const t0 = performance.now();
+  resetClassifierCompareUI();
+  $("#classifier-compare-source-label").textContent = "Running live against your own key…";
+  $("#classifier-compare-progress").textContent = "Embedding each question and predicting both ways…";
+
+  const tbody = createResultsTable($("#classifier-compare-table"), CLASSIFIER_COMPARE_TABLE_HEADERS);
+  $("#classifier-compare-table-section").hidden = false;
+
+  const es = new FetchEventSource("/api/training/classifier/compare/stream", { headers: authHeaders() });
+  const close = () => {
+    es.close();
+    btn.disabled = false;
+  };
+
+  es.addEventListener("classifier_item", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-classifier-compare", "classifier_item", payload);
+    appendResultRow(tbody, classifierCompareRowCells(payload), [
+      { index: 2, ok: payload.classifier_hit },
+      { index: 3, ok: payload.rag_hit },
+    ]);
+  });
+
+  es.addEventListener("classifier_done", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-classifier-compare", "classifier_done", payload);
+    $("#metric-classifier-accuracy").textContent = `${Math.round(payload.classifier_accuracy * 100)}%`;
+    $("#metric-rag-top1-accuracy").textContent = `${Math.round(payload.rag_top1_accuracy * 100)}%`;
+  });
+
+  es.addEventListener("pipeline_done", (e) => {
+    appendLog("log-classifier-compare", "pipeline_done", JSON.parse(e.data));
+    $("#classifier-compare-progress").textContent = "Done.";
+    $("#classifier-compare-source-label").textContent = "Live run — just now, against this exact index, with your key.";
+    recordTechniqueLatency("classifier_compare", Math.round(performance.now() - t0));
+    close();
+  });
+
+  es.addEventListener("pipeline_error", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-classifier-compare", "pipeline_error", payload, true);
+    $("#classifier-compare-progress").textContent = `Error: ${payload.message}`;
+    $("#classifier-compare-source-label").textContent = "Live run failed — showing whatever loaded before the error.";
+    close();
+  });
+
+  es.onerror = () => close();
+}
+
+$("#btn-classifier-compare").addEventListener("click", runClassifierComparison);
+loadClassifierCompareSnapshot();
 
 // --------------------------------------------------------------- status ---
 
@@ -239,6 +562,22 @@ function updateAskAvailability(data) {
       ingestHint.textContent = missingKeyHint;
     }
   }
+
+  // Prompting Lab: same gating as Ask (needs a built index + a usable key).
+  [
+    ["btn-prompting-variants", "prompting-variants-disabled-hint"],
+    ["btn-prompting-temperature", "prompting-temperature-disabled-hint"],
+    ["btn-prompting-structured", "prompting-structured-disabled-hint"],
+  ].forEach(([btnId, hintId]) => {
+    const promptBtn = $(`#${btnId}`);
+    const promptHint = $(`#${hintId}`);
+    if (!promptBtn) return;
+    promptBtn.disabled = disabled;
+    if (promptHint) {
+      promptHint.hidden = !disabled;
+      promptHint.textContent = !hasUsableKey ? missingKeyHint : "Build the index first, in the \"Build the Index\" tab.";
+    }
+  });
 }
 
 $("#byok-save").addEventListener("click", () => {
@@ -686,9 +1025,28 @@ function resetAskUI() {
   $("#answer-text").textContent = "";
   $("#sources-chips").innerHTML = "";
   $("#log-ask").innerHTML = "";
+  $("#rerank-info").hidden = true;
+  $("#rerank-info-content").innerHTML = "";
   ["question", "embedding", "search", "topk", "prompt", "llm", "answer"].forEach((b) => setAskBoxDetail(b, "—"));
   askBoxPayloads.clear();
   hideBoxOutput("ask");
+}
+
+function renderRerankInfo(before, after) {
+  const container = $("#rerank-info-content");
+  container.innerHTML = "";
+  const beforeList = before.map((c) => `${c.source} #${c.chunk_index}`).join(", ");
+  const afterList = after
+    .map((c) => `${c.source} #${c.chunk_index} (${c.rerank_score.toFixed(1)})`)
+    .join(", ");
+  const p1 = document.createElement("p");
+  p1.className = "muted small";
+  p1.textContent = `Top by cosine similarity (before): ${beforeList}`;
+  const p2 = document.createElement("p");
+  p2.className = "small";
+  p2.textContent = `Top by LLM relevance score (after): ${afterList}`;
+  container.appendChild(p1);
+  container.appendChild(p2);
 }
 
 function renderScoreBars(allScores, topKSources) {
@@ -797,7 +1155,8 @@ function askQuestionClassic(question) {
   setBoxState("pipeline-ask", "question", "active");
   currentTiming = null;
 
-  const url = `/api/ask/stream?question=${encodeURIComponent(question)}`;
+  const rerank = $("#rerank-toggle")?.checked;
+  const url = `/api/ask/stream?question=${encodeURIComponent(question)}${rerank ? "&rerank=true" : ""}`;
   const es = new FetchEventSource(url, { headers: authHeaders() });
   const close = () => {
     es.close();
@@ -812,6 +1171,17 @@ function askQuestionClassic(question) {
     setBoxState("pipeline-ask", "question", "done");
     setAskBoxDetail("question", payload.question.length > 28 ? payload.question.slice(0, 28) + "…" : payload.question);
     currentTiming = { t_question: payload.ts };
+  });
+
+  es.addEventListener("rerank_start", (e) => {
+    appendLog("log-ask", "rerank_start", JSON.parse(e.data));
+  });
+
+  es.addEventListener("rerank_done", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-ask", "rerank_done", payload);
+    $("#rerank-info").hidden = false;
+    renderRerankInfo(payload.before, payload.after);
   });
 
   es.addEventListener("embedding_query_start", (e) => {
@@ -898,6 +1268,7 @@ function askQuestionClassic(question) {
       renderLatencyBreakdown(currentTiming);
       sessionLatencies.push(currentTiming.total_ms);
       renderLatencyDistribution();
+      recordTechniqueLatency(rerank ? "classic_rerank" : "classic", currentTiming.total_ms);
     }
   });
 
@@ -1393,6 +1764,46 @@ function buildVectorToggle(chunk) {
   return wrapper;
 }
 
+// ------------------------------------------------- Explore tab: tokenizer --
+//
+// Zero-cost, zero-key: tiktoken runs locally on the server (no OpenAI
+// call), so this can run freely and often, unlike everything in the Ask
+// tab. Shows the real gpt-4o-mini tokenizer against the word-based
+// chunking shown one card above, making "word count is a proxy for token
+// count" (see README) a measured ratio instead of a claim.
+
+async function runTokenizer() {
+  const text = $("#tokenizer-input").value;
+  const statsEl = $("#tokenizer-stats");
+  const vizEl = $("#tokenizer-viz");
+  if (!text.trim()) {
+    statsEl.textContent = "";
+    vizEl.innerHTML = "";
+    return;
+  }
+  statsEl.textContent = "Tokenizing…";
+  try {
+    const res = await fetch(`/api/tokenize?text=${encodeURIComponent(text)}`);
+    const data = await res.json();
+    statsEl.textContent =
+      `${data.n_tokens} tokens (${data.encoding}) from ${data.n_words} words ` +
+      `→ ${data.words_per_token} words/token`;
+    vizEl.innerHTML = "";
+    data.tokens.forEach((tok, i) => {
+      const span = document.createElement("span");
+      span.className = `token-span t${i % 6}`;
+      span.textContent = tok.text;
+      span.title = `token id ${tok.id}`;
+      vizEl.appendChild(span);
+    });
+  } catch (err) {
+    statsEl.textContent = "Could not tokenize this text.";
+    vizEl.innerHTML = "";
+  }
+}
+
+$("#tokenizer-run-btn")?.addEventListener("click", runTokenizer);
+
 async function loadCodeSnippet(key) {
   const viewer = $("#code-viewer");
   if (codeSnippetCache.has(key)) {
@@ -1718,6 +2129,197 @@ function runComparison() {
 $("#btn-compare").addEventListener("click", runComparison);
 loadCompareSnapshot();
 
+// ================================================== RERANK COMPARISON ======
+//
+// Runs eval/evaluate.py's evaluate_rerank_comparison() — Recall@K on the
+// same 8-candidate pool, with vs. without the LLM-based reranker
+// (src/reranker.py) re-sorting it — structurally identical to the
+// embeddings-vs-keyword card above, different columns.
+
+const RERANK_COMPARE_TABLE_HEADERS = ["Question", "Expected", "Without reranking", "With reranking"];
+
+function rerankCompareRowCells(item) {
+  return [
+    item.question,
+    item.expected_sources.join(", "),
+    item.no_rerank_hit ? "hit" : "miss",
+    item.rerank_hit ? "hit" : "miss",
+  ];
+}
+
+function resetRerankCompareUI() {
+  $("#rerank-compare-progress").textContent = "";
+  $("#metric-no-rerank-recall").textContent = "—";
+  $("#metric-rerank-recall").textContent = "—";
+  $("#rerank-compare-table-section").hidden = true;
+  $("#rerank-compare-table").innerHTML = "";
+}
+
+async function loadRerankCompareSnapshot() {
+  try {
+    const res = await fetch("/api/eval/snapshot");
+    if (!res.ok) return;
+    const snap = await res.json();
+    if (snap.no_rerank_recall == null || snap.rerank_recall == null) {
+      $("#rerank-compare-source-label").textContent = "No snapshot committed yet — click \"Run comparison live\" below.";
+      return;
+    }
+    $("#metric-no-rerank-recall").textContent = `${Math.round(snap.no_rerank_recall * 100)}%`;
+    $("#metric-rerank-recall").textContent = `${Math.round(snap.rerank_recall * 100)}%`;
+    $("#rerank-compare-source-label").textContent =
+      `Snapshot computed ${fmtSnapshotDate(snap.generated_at)} against this exact index — committed to the repo, not live.`;
+
+    const tbody = createResultsTable($("#rerank-compare-table"), RERANK_COMPARE_TABLE_HEADERS);
+    $("#rerank-compare-table-section").hidden = false;
+    (snap.rerank_compare_items || []).forEach((item) => {
+      appendResultRow(tbody, rerankCompareRowCells(item), [
+        { index: 2, ok: item.no_rerank_hit },
+        { index: 3, ok: item.rerank_hit },
+      ]);
+    });
+  } catch (err) {
+    $("#rerank-compare-source-label").textContent = "Could not load the comparison snapshot.";
+  }
+}
+
+function runRerankComparison() {
+  const btn = $("#btn-rerank-compare");
+  btn.disabled = true;
+  resetRerankCompareUI();
+  $("#rerank-compare-source-label").textContent = "Running live against your own key…";
+  $("#rerank-compare-progress").textContent = "Retrieving 8 candidates and reranking each question…";
+
+  const tbody = createResultsTable($("#rerank-compare-table"), RERANK_COMPARE_TABLE_HEADERS);
+  $("#rerank-compare-table-section").hidden = false;
+
+  const es = new FetchEventSource("/api/eval/rerank/stream", { headers: authHeaders() });
+  const close = () => {
+    es.close();
+    btn.disabled = false;
+  };
+
+  es.addEventListener("rerank_compare_item", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-rerank-compare", "rerank_compare_item", payload);
+    appendResultRow(tbody, rerankCompareRowCells(payload), [
+      { index: 2, ok: payload.no_rerank_hit },
+      { index: 3, ok: payload.rerank_hit },
+    ]);
+  });
+
+  es.addEventListener("rerank_compare_done", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-rerank-compare", "rerank_compare_done", payload);
+    $("#metric-no-rerank-recall").textContent = `${Math.round(payload.no_rerank_recall * 100)}%`;
+    $("#metric-rerank-recall").textContent = `${Math.round(payload.rerank_recall * 100)}%`;
+  });
+
+  es.addEventListener("pipeline_done", (e) => {
+    appendLog("log-rerank-compare", "pipeline_done", JSON.parse(e.data));
+    $("#rerank-compare-progress").textContent = "Done.";
+    $("#rerank-compare-source-label").textContent = "Live run — just now, against this exact index, with your key.";
+    close();
+  });
+
+  es.addEventListener("pipeline_error", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-rerank-compare", "pipeline_error", payload, true);
+    $("#rerank-compare-progress").textContent = `Error: ${payload.message}`;
+    $("#rerank-compare-source-label").textContent = "Live run failed — showing whatever loaded before the error.";
+    close();
+  });
+
+  es.onerror = () => close();
+}
+
+$("#btn-rerank-compare").addEventListener("click", runRerankComparison);
+loadRerankCompareSnapshot();
+
+// ================================================== CONSISTENCY ============
+//
+// Runs eval/evaluate.py's evaluate_consistency() — the same question
+// through answer() 5 times at temperature=0, to measure how repeatable
+// the answers actually are.
+
+function renderConsistencyResult(container, data) {
+  container.innerHTML = "";
+  const p1 = document.createElement("p");
+  p1.className = "small";
+  p1.textContent =
+    `${data.n_unique_answers} unique answer${data.n_unique_answers === 1 ? "" : "s"} out of ` +
+    `${data.n_runs} runs · exact-match rate: ${Math.round(data.exact_match_rate * 100)}% · ` +
+    `cited sources agree: ${data.sources_agree ? "yes" : "no"}`;
+  const p2 = document.createElement("p");
+  p2.className = "muted small";
+  p2.textContent = `Average word-overlap (Jaccard) between every pair of answers: ${data.avg_jaccard_similarity.toFixed(2)}`;
+  container.appendChild(p1);
+  container.appendChild(p2);
+}
+
+async function loadConsistencySnapshot() {
+  try {
+    const res = await fetch("/api/eval/snapshot");
+    if (!res.ok) return;
+    const snap = await res.json();
+    if (!snap.consistency) {
+      $("#consistency-source-label").textContent = "No snapshot committed yet — click \"Run comparison live\" below.";
+      return;
+    }
+    $("#consistency-source-label").textContent =
+      `Snapshot computed ${fmtSnapshotDate(snap.generated_at)} against this exact index — committed to the repo, not live.`;
+    renderConsistencyResult($("#consistency-result"), snap.consistency);
+  } catch (err) {
+    $("#consistency-source-label").textContent = "Could not load the consistency snapshot.";
+  }
+}
+
+function runConsistency() {
+  const btn = $("#btn-consistency");
+  btn.disabled = true;
+  $("#consistency-source-label").textContent = "Running live against your own key…";
+  $("#consistency-progress").textContent = "Asking the same question 5 times…";
+  $("#consistency-result").innerHTML = "";
+  $("#log-consistency").innerHTML = "";
+
+  const es = new FetchEventSource("/api/eval/consistency/stream", { headers: authHeaders() });
+  const close = () => {
+    es.close();
+    btn.disabled = false;
+  };
+
+  es.addEventListener("consistency_run", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-consistency", "consistency_run", payload);
+    $("#consistency-progress").textContent = `Run ${payload.run + 1} of 5…`;
+  });
+
+  es.addEventListener("consistency_done", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-consistency", "consistency_done", payload);
+    renderConsistencyResult($("#consistency-result"), payload);
+  });
+
+  es.addEventListener("pipeline_done", (e) => {
+    appendLog("log-consistency", "pipeline_done", JSON.parse(e.data));
+    $("#consistency-progress").textContent = "Done.";
+    $("#consistency-source-label").textContent = "Live run — just now, against this exact index, with your key.";
+    close();
+  });
+
+  es.addEventListener("pipeline_error", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-consistency", "pipeline_error", payload, true);
+    $("#consistency-progress").textContent = `Error: ${payload.message}`;
+    $("#consistency-source-label").textContent = "Live run failed — showing whatever loaded before the error.";
+    close();
+  });
+
+  es.onerror = () => close();
+}
+
+$("#btn-consistency").addEventListener("click", runConsistency);
+loadConsistencySnapshot();
+
 // ----------------------------------------------------------- latency ------
 //
 // Real per-stage timings from the SSE events of the question you actually
@@ -1725,8 +2327,47 @@ loadCompareSnapshot();
 // across every question asked this session — no percentiles pretending to
 // be statistically meaningful from a handful of samples.
 
-const sessionLatencies = []; // total ms per question asked this session
+const sessionLatencies = []; // total ms per question asked this session (classic Ask only)
 let currentTiming = null;
+
+// Per-technique latency, covering every new technique added beyond classic
+// Ask — same "real numbers from this session, not simulated" idiom as
+// sessionLatencies above, just broken out by which pipeline produced them.
+const techniqueLatencies = {};
+const TECHNIQUE_LABELS = {
+  classic: "Classic RAG",
+  classic_rerank: "Classic RAG + reranking",
+  prompting_variants: "Prompting Lab: zero/few-shot/CoT",
+  prompting_temperature: "Prompting Lab: temperature",
+  prompting_structured: "Prompting Lab: structured output",
+  classifier_compare: "Classifier vs. RAG comparison",
+};
+
+function recordTechniqueLatency(name, ms) {
+  (techniqueLatencies[name] = techniqueLatencies[name] || []).push(ms);
+  renderTechniqueLatencies();
+}
+
+function renderTechniqueLatencies() {
+  const container = $("#technique-latency");
+  if (!container) return;
+  const names = Object.keys(techniqueLatencies).filter((n) => techniqueLatencies[n].length > 0);
+  if (names.length === 0) {
+    container.innerHTML = '<p class="muted small">No technique run yet this session.</p>';
+    return;
+  }
+  const tbody = createResultsTable(container, ["Technique", "Runs", "P50", "Min", "Max"]);
+  names.forEach((name) => {
+    const sorted = [...techniqueLatencies[name]].sort((a, b) => a - b);
+    appendResultRow(tbody, [
+      TECHNIQUE_LABELS[name] || name,
+      String(sorted.length),
+      `${percentile(sorted, 0.5)}ms`,
+      `${sorted[0]}ms`,
+      `${sorted[sorted.length - 1]}ms`,
+    ]);
+  });
+}
 
 function renderLatencyBreakdown(timing) {
   const container = $("#latency-breakdown");
@@ -1799,6 +2440,32 @@ function showAppShell() {
   $("#app-shell").hidden = false;
 }
 
+// ------------------------------------------------------- hash deep links --
+//
+// Lets an external link (e.g. a card on the home page) jump straight into
+// a specific tab/mode instead of landing on the generic "Build the Index"
+// tab — e.g. /RAG/#prompting:temperature or /RAG/#training:classifier.
+// Falls back to the normal first-tab landing when there's no hash, or it
+// doesn't match a known tab.
+
+const VALID_HASH_TABS = ["init", "ask", "prompting", "training", "explore", "metrics"];
+
+function parseHashTarget() {
+  const hash = location.hash.replace(/^#/, "");
+  if (!hash) return null;
+  const [tab, mode] = hash.split(":");
+  if (!VALID_HASH_TABS.includes(tab)) return null;
+  return { tab, mode: mode || null };
+}
+
+function applyHashTarget(target) {
+  switchToTab(target.tab);
+  if (!target.mode) return;
+  if (target.tab === "ask") setAskMode(target.mode);
+  if (target.tab === "prompting") setPromptMode(target.mode);
+  if (target.tab === "training") setTrainingMode(target.mode);
+}
+
 async function startDemoSession() {
   const buttons = $$("#btn-start-demo, [data-start-demo-link]");
   const statusEl = $("#landing-start-status");
@@ -1820,7 +2487,13 @@ async function startDemoSession() {
     }
     setSessionId(sessionId);
     showAppShell();
-    switchToTab("init"); // start at step 1, same as a fresh page load — the index is already seeded, so there's nothing to build first, but the tour still starts from the top
+    // Start at step 1 by default, same as a fresh page load — the index is
+    // already seeded, so there's nothing to build first, but the tour
+    // still starts from the top — unless a hash deep-link asked for a
+    // specific tab (e.g. a card on the home page).
+    const target = parseHashTarget();
+    if (target) applyHashTarget(target);
+    else switchToTab("init");
     checkStatus();
   } catch (err) {
     statusEl.textContent = "Could not reach the server. Try again.";
@@ -1839,6 +2512,12 @@ $$("#btn-start-demo, [data-start-demo-link]").forEach((btn) => {
 // seeing the landing screen again.
 if (getSessionId()) {
   showAppShell();
+  const target = parseHashTarget();
+  if (target) applyHashTarget(target);
+} else if (parseHashTarget()) {
+  // A deep link from outside (e.g. the home page) with no session yet:
+  // skip the extra landing-screen click and start the demo immediately.
+  startDemoSession();
 }
 
 checkStatus();

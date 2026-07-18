@@ -28,16 +28,31 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from eval.evaluate import (
+    evaluate_classifier_vs_rag,
+    evaluate_consistency,
     evaluate_faithfulness,
     evaluate_recall_at_k,
+    evaluate_rerank_comparison,
     evaluate_retrieval_comparison,
     load_golden_dataset,
 )
-from src import agentic_rag, chunking, config, embeddings, rag, vector_store
+from src import (
+    agentic_rag,
+    chunking,
+    classifier,
+    config,
+    embeddings,
+    finetune_illustration,
+    prompting_lab,
+    rag,
+    reranker,
+    tokenizer_demo,
+    vector_store,
+)
 from src.agentic_rag import answer_agentic
 from src.ingest import build_index, load_documents
 from src.rag import answer
-from src.retriever import get_default_store, set_store, similarity_from_indexed_chunk
+from src.retriever import get_default_store, get_store, set_store, similarity_from_indexed_chunk
 from src.session_store import SESSION_TTL_SECONDS, get_session_store
 
 app = FastAPI(title="RAG demo — pipeline en vivo")
@@ -55,6 +70,12 @@ CODE_REGISTRY: dict[str, list] = {
     "vector_store_search": [vector_store.SimpleVectorStore.search],
     "prompt": [rag._build_prompt],
     "agentic_loop": [agentic_rag.answer_agentic],
+    "tokenizer": [tokenizer_demo.tokenize_text],
+    "prompting_variants": [prompting_lab.run_prompt_variants, prompting_lab._variant_prompt],
+    "structured_output": [prompting_lab.run_structured_output, prompting_lab._validate_structured],
+    "reranker": [reranker.rerank_chunks],
+    "finetune_illustration": [finetune_illustration.build_finetune_examples],
+    "classifier": [classifier.fit_nearest_centroid, classifier.predict_nearest_centroid],
 }
 
 
@@ -125,6 +146,14 @@ _AGENTIC_ASK_UNITS = 9          # worst case: up to 4 chat completions + up to 3
 _INGEST_UNITS = 1               # chunks are embedded in a single batch call
 _EVAL_UNITS = 30                # 10 embeddings + 10 answers + 10 judge calls
 _COMPARE_UNITS = 10             # 10 embeddings only — keyword search makes no OpenAI calls
+_PROMPT_VARIANTS_UNITS = 4      # 1 embedding + 3 chat completions (zero-shot / few-shot / CoT)
+_PROMPT_TEMPERATURE_UNITS = 1 + len(config.TEMPERATURE_PLAYGROUND_VALUES)  # 1 embedding + 1 chat call per temperature
+_PROMPT_STRUCTURED_UNITS = 3    # 1 embedding + 1 structured call + 1 free-text call
+_RERANK_UNITS = 1               # 1 extra batched chat call on top of _ASK_UNITS
+_RERANK_COMPARE_UNITS = 20      # 10 embeddings + 10 batched rerank calls
+_CLASSIFIER_COMPARE_UNITS = 10  # 10 embeddings only — classifier prediction makes no OpenAI call
+_CONSISTENCY_RUNS = 5
+_CONSISTENCY_UNITS = _CONSISTENCY_RUNS * _ASK_UNITS  # 5 runs x (1 embedding + 1 chat call) each
 
 
 def _client_ip(request: Request) -> str:
@@ -321,6 +350,45 @@ def kb_chunks(source: str | None = None):
     return result
 
 
+@app.get("/api/tokenize")
+def tokenize(text: str):
+    """Splits arbitrary text into real gpt-4o-mini tokens (o200k_base),
+    no OpenAI call needed — tiktoken runs entirely locally. Same free
+    tier as the other /api/kb/* read-only endpoints.
+    """
+    return tokenizer_demo.tokenize_text(text)
+
+
+@app.get("/api/training/finetune-example")
+def training_finetune_example():
+    """Illustrative fine-tuning examples built from this project's own
+    real data — see src/finetune_illustration.py. No training actually
+    happens, no OpenAI call is made: this is purely "here's what a
+    training example looks like," free tier same as /api/kb/*.
+    """
+    return finetune_illustration.build_finetune_examples()
+
+
+@app.get("/api/training/classifier/train")
+def training_classifier_train(
+    x_session_id: str | None = Header(default=None, alias="X-Session-Id"),
+):
+    """Fits the nearest-centroid classifier (src/classifier.py) on the
+    already-indexed chunk vectors — a real, if tiny, training step, but
+    zero OpenAI calls (it reuses vectors already computed at ingestion
+    time), so this is always free, no key needed.
+    """
+    if not _has_usable_index(x_session_id):
+        raise HTTPException(status_code=409, detail="No hay índice construido todavía.")
+    store = get_store(x_session_id)
+    basis = classifier.fit_nearest_centroid(store)
+    return {
+        "labels": basis["labels"],
+        "n_examples_per_label": basis["n_examples_per_label"],
+        "centroid_separation": classifier.centroid_separation(basis),
+    }
+
+
 @app.get("/api/kb/index")
 def kb_index():
     """Summary of what's literally persisted on disk: the array in
@@ -499,6 +567,99 @@ def eval_compare_stream(
     return run_pipeline_as_sse(target)
 
 
+@app.get("/api/eval/rerank/stream")
+def eval_rerank_stream(
+    request: Request,
+    x_openai_key: str | None = Header(default=None, alias="X-OpenAI-Key"),
+    x_session_id: str | None = Header(default=None, alias="X-Session-Id"),
+):
+    """Recall@K with vs. without the LLM-based reranker (src/reranker.py),
+    on the same over-retrieved candidate pool both times — see
+    eval.evaluate.evaluate_rerank_comparison. ~20 OpenAI calls (10
+    embeddings + 10 batched rerank calls), shares the eval daily free-run
+    budget with the other /api/eval/*/stream routes.
+    """
+    if not _has_usable_index(x_session_id):
+        return _immediate_error(
+            "No hay índice construido todavía. Andá a la pestaña 'Build the Index' y construilo primero."
+        )
+    if not x_openai_key:
+        limit_error = _check_rate_limit(request, units=_RERANK_COMPARE_UNITS, is_eval=True)
+        if limit_error:
+            return _immediate_error(limit_error)
+    api_key = _resolve_api_key(x_openai_key)
+    if not api_key:
+        return _immediate_error(NO_KEY_MESSAGE)
+
+    def target(on_event):
+        golden = load_golden_dataset()
+        return evaluate_rerank_comparison(golden, on_event=on_event, api_key=api_key, session_id=x_session_id)
+
+    return run_pipeline_as_sse(target)
+
+
+@app.get("/api/training/classifier/compare/stream")
+def training_classifier_compare_stream(
+    request: Request,
+    x_openai_key: str | None = Header(default=None, alias="X-OpenAI-Key"),
+    x_session_id: str | None = Header(default=None, alias="X-Session-Id"),
+):
+    """Nearest-centroid classifier (trained on indexed chunks) vs. RAG's
+    top-1 retrieval, on the 10 golden-dataset questions — see
+    eval.evaluate.evaluate_classifier_vs_rag. 10 OpenAI calls (question
+    embeddings only; both predictions reuse the same embedding).
+    """
+    if not _has_usable_index(x_session_id):
+        return _immediate_error(
+            "No hay índice construido todavía. Andá a la pestaña 'Build the Index' y construilo primero."
+        )
+    if not x_openai_key:
+        limit_error = _check_rate_limit(request, units=_CLASSIFIER_COMPARE_UNITS, is_eval=True)
+        if limit_error:
+            return _immediate_error(limit_error)
+    api_key = _resolve_api_key(x_openai_key)
+    if not api_key:
+        return _immediate_error(NO_KEY_MESSAGE)
+
+    def target(on_event):
+        golden = load_golden_dataset()
+        return evaluate_classifier_vs_rag(golden, on_event=on_event, api_key=api_key, session_id=x_session_id)
+
+    return run_pipeline_as_sse(target)
+
+
+@app.get("/api/eval/consistency/stream")
+def eval_consistency_stream(
+    request: Request,
+    question: str | None = None,
+    x_openai_key: str | None = Header(default=None, alias="X-OpenAI-Key"),
+    x_session_id: str | None = Header(default=None, alias="X-Session-Id"),
+):
+    """Runs the same question through answer() 5 times (always
+    temperature=0) and measures how consistent the results really are —
+    see eval.evaluate.evaluate_consistency. Defaults to the first golden
+    question, same one used for the committed snapshot's sample, so a
+    live re-run is directly comparable to it.
+    """
+    if not _has_usable_index(x_session_id):
+        return _immediate_error(
+            "No hay índice construido todavía. Andá a la pestaña 'Build the Index' y construilo primero."
+        )
+    if not x_openai_key:
+        limit_error = _check_rate_limit(request, units=_CONSISTENCY_UNITS, is_eval=True)
+        if limit_error:
+            return _immediate_error(limit_error)
+    api_key = _resolve_api_key(x_openai_key)
+    if not api_key:
+        return _immediate_error(NO_KEY_MESSAGE)
+
+    def target(on_event):
+        q = question or load_golden_dataset()[0]["question"]
+        return evaluate_consistency(q, n_runs=_CONSISTENCY_RUNS, on_event=on_event, api_key=api_key, session_id=x_session_id)
+
+    return run_pipeline_as_sse(target)
+
+
 @app.get("/api/ingest/stream")
 def ingest_stream(
     request: Request,
@@ -565,6 +726,7 @@ def ask_stream(
     request: Request,
     question: str,
     top_k: int | None = None,
+    rerank: bool = False,
     x_openai_key: str | None = Header(default=None, alias="X-OpenAI-Key"),
     x_session_id: str | None = Header(default=None, alias="X-Session-Id"),
 ):
@@ -573,7 +735,8 @@ def ask_stream(
             "No hay índice construido todavía. Andá a la pestaña 'Inicialización' y construilo primero."
         )
     if not x_openai_key:
-        limit_error = _check_rate_limit(request, units=_ASK_UNITS, is_eval=False)
+        units = _ASK_UNITS + _RERANK_UNITS if rerank else _ASK_UNITS
+        limit_error = _check_rate_limit(request, units=units, is_eval=False)
         if limit_error:
             return _immediate_error(limit_error)
     api_key = _resolve_api_key(x_openai_key)
@@ -581,7 +744,7 @@ def ask_stream(
         return _immediate_error(NO_KEY_MESSAGE)
 
     def target(on_event):
-        return answer(question, top_k=top_k, on_event=on_event, api_key=api_key, session_id=x_session_id)
+        return answer(question, top_k=top_k, on_event=on_event, api_key=api_key, session_id=x_session_id, rerank=rerank)
 
     return run_pipeline_as_sse(target)
 
@@ -617,6 +780,92 @@ def ask_agentic_stream(
         return answer_agentic(question, top_k=top_k, on_event=on_event, api_key=api_key, session_id=x_session_id)
 
     return run_pipeline_as_sse(target)
+
+
+@app.get("/api/prompting/variants/stream")
+def prompting_variants_stream(
+    request: Request,
+    question: str,
+    x_openai_key: str | None = Header(default=None, alias="X-OpenAI-Key"),
+    x_session_id: str | None = Header(default=None, alias="X-Session-Id"),
+):
+    """Zero-shot vs. few-shot vs. Chain-of-Thought, same question, same
+    retrieved context — see src/prompting_lab.py. No free/snapshot tier:
+    this is a live interactive demo, same as /api/ask/stream.
+    """
+    if not _has_usable_index(x_session_id):
+        return _immediate_error(
+            "No hay índice construido todavía. Andá a la pestaña 'Build the Index' y construilo primero."
+        )
+    if not x_openai_key:
+        limit_error = _check_rate_limit(request, units=_PROMPT_VARIANTS_UNITS, is_eval=False)
+        if limit_error:
+            return _immediate_error(limit_error)
+    api_key = _resolve_api_key(x_openai_key)
+    if not api_key:
+        return _immediate_error(NO_KEY_MESSAGE)
+
+    def target(on_event):
+        return prompting_lab.run_prompt_variants(question, on_event=on_event, api_key=api_key, session_id=x_session_id)
+
+    return run_pipeline_as_sse(target)
+
+
+@app.get("/api/prompting/temperature/stream")
+def prompting_temperature_stream(
+    request: Request,
+    question: str,
+    x_openai_key: str | None = Header(default=None, alias="X-OpenAI-Key"),
+    x_session_id: str | None = Header(default=None, alias="X-Session-Id"),
+):
+    """Same question/prompt, several temperature values — see
+    src/prompting_lab.py's TEMPERATURE_PLAYGROUND_VALUES.
+    """
+    if not _has_usable_index(x_session_id):
+        return _immediate_error(
+            "No hay índice construido todavía. Andá a la pestaña 'Build the Index' y construilo primero."
+        )
+    if not x_openai_key:
+        limit_error = _check_rate_limit(request, units=_PROMPT_TEMPERATURE_UNITS, is_eval=False)
+        if limit_error:
+            return _immediate_error(limit_error)
+    api_key = _resolve_api_key(x_openai_key)
+    if not api_key:
+        return _immediate_error(NO_KEY_MESSAGE)
+
+    def target(on_event):
+        return prompting_lab.run_temperature_playground(question, on_event=on_event, api_key=api_key, session_id=x_session_id)
+
+    return run_pipeline_as_sse(target)
+
+
+@app.get("/api/prompting/structured")
+def prompting_structured(
+    request: Request,
+    question: str,
+    x_openai_key: str | None = Header(default=None, alias="X-OpenAI-Key"),
+    x_session_id: str | None = Header(default=None, alias="X-Session-Id"),
+):
+    """Structured-output (json_schema mode) vs. free text on the same
+    prompt — see src/prompting_lab.py. Plain JSON, not SSE: only 3 short
+    calls total (1 embedding + 2 chat), nothing worth token-streaming.
+    First non-SSE OpenAI-calling route in the project, so it uses
+    HTTPException for errors instead of the SSE-only _immediate_error.
+    """
+    if not _has_usable_index(x_session_id):
+        raise HTTPException(status_code=409, detail="No hay índice construido todavía.")
+    if not x_openai_key:
+        limit_error = _check_rate_limit(request, units=_PROMPT_STRUCTURED_UNITS, is_eval=False)
+        if limit_error:
+            raise HTTPException(status_code=429, detail=limit_error)
+    api_key = _resolve_api_key(x_openai_key)
+    if not api_key:
+        raise HTTPException(status_code=400, detail=NO_KEY_MESSAGE)
+
+    try:
+        return prompting_lab.run_structured_output(question, api_key=api_key, session_id=x_session_id)
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
 
 # Static files last: Starlette resolves routes in registration order, so

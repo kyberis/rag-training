@@ -55,6 +55,54 @@
       "name": "RAG Live",
       "description": "A real, runnable RAG pipeline you can watch step by step — embeddings, vector search, and why it beats plain keyword search.",
       "url": "https://learning.trefolio.com/RAG"
+    },
+    {
+      "@type": "LearningResource",
+      "name": "Tokenization",
+      "description": "The real gpt-4o-mini tokenizer (tiktoken), run live against any text you paste, no API call needed.",
+      "url": "https://learning.trefolio.com/RAG/#explore"
+    },
+    {
+      "@type": "LearningResource",
+      "name": "Prompt engineering: zero-shot vs. few-shot vs. Chain-of-Thought",
+      "description": "The same question and retrieved context, three prompting techniques, side by side.",
+      "url": "https://learning.trefolio.com/RAG/#prompting:variants"
+    },
+    {
+      "@type": "LearningResource",
+      "name": "Temperature and sampling",
+      "description": "The same question and prompt, run once per temperature value — determinism vs. creativity, live.",
+      "url": "https://learning.trefolio.com/RAG/#prompting:temperature"
+    },
+    {
+      "@type": "LearningResource",
+      "name": "Structured outputs",
+      "description": "OpenAI Structured Outputs (json_schema mode) vs. free text on the same prompt, with schema validation.",
+      "url": "https://learning.trefolio.com/RAG/#prompting:structured"
+    },
+    {
+      "@type": "LearningResource",
+      "name": "LLM-based reranking",
+      "description": "An extra reranking step between retrieval and generation, measured with vs. without.",
+      "url": "https://learning.trefolio.com/RAG/#ask"
+    },
+    {
+      "@type": "LearningResource",
+      "name": "Fine-tuning walkthrough",
+      "description": "What a real fine-tuning training example looks like, built from this project's own data — illustrative, zero cost.",
+      "url": "https://learning.trefolio.com/RAG/#training:finetune"
+    },
+    {
+      "@type": "LearningResource",
+      "name": "A real toy classifier",
+      "description": "A genuinely trained nearest-centroid classifier, numpy-only, measured against RAG on held-out questions.",
+      "url": "https://learning.trefolio.com/RAG/#training:classifier"
+    },
+    {
+      "@type": "LearningResource",
+      "name": "Extended evaluation",
+      "description": "Consistency/robustness across repeated runs, and real per-technique latency.",
+      "url": "https://learning.trefolio.com/RAG/#metrics"
     }
   ]
 }
@@ -93,6 +141,47 @@
         <span class="pill">Evaluation</span>
       </div>
       <span class="hub-card-cta">Open the demo →</span>
+    </a>
+  </div>
+
+  <h2 class="hub-section-title">Jump straight to a technique</h2>
+  <p class="muted small">
+    Every entry below is a real tab or mode inside RAG Live, not a separate app — these links drop
+    you directly into it.
+  </p>
+
+  <div class="hub-grid hub-grid-techniques">
+    <a class="card technique-card" href="/RAG/#explore">
+      <h4>Tokenization</h4>
+      <p class="muted small">The real gpt-4o-mini tokenizer (tiktoken), run on any text you paste — no API call.</p>
+    </a>
+    <a class="card technique-card" href="/RAG/#prompting:variants">
+      <h4>Zero-shot vs. few-shot vs. CoT</h4>
+      <p class="muted small">Same question, same context, three prompting techniques compared side by side.</p>
+    </a>
+    <a class="card technique-card" href="/RAG/#prompting:temperature">
+      <h4>Temperature &amp; sampling</h4>
+      <p class="muted small">The same prompt run at several temperature values — determinism vs. creativity, live.</p>
+    </a>
+    <a class="card technique-card" href="/RAG/#prompting:structured">
+      <h4>Structured outputs</h4>
+      <p class="muted small">json_schema mode vs. free text, with hand-rolled schema validation shown.</p>
+    </a>
+    <a class="card technique-card" href="/RAG/#ask">
+      <h4>LLM-based reranking</h4>
+      <p class="muted small">An optional rerank step between retrieval and generation — toggle it and compare.</p>
+    </a>
+    <a class="card technique-card" href="/RAG/#training:finetune">
+      <h4>Fine-tuning walkthrough</h4>
+      <p class="muted small">What a real fine-tuning example looks like, built from this project's own data.</p>
+    </a>
+    <a class="card technique-card" href="/RAG/#training:classifier">
+      <h4>A real toy classifier</h4>
+      <p class="muted small">A genuinely trained numpy-only classifier, measured against RAG on held-out questions.</p>
+    </a>
+    <a class="card technique-card" href="/RAG/#metrics">
+      <h4>Extended evaluation</h4>
+      <p class="muted small">Consistency across repeated runs, and real per-technique latency.</p>
     </a>
   </div>
 

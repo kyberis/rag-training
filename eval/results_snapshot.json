@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-16T01:00:22.531562+00:00",
+  "generated_at": "2026-07-17T00:24:08.964725+00:00",
   "embedding_model": "text-embedding-3-small",
   "chat_model": "gpt-4o-mini",
   "recall": 1.0,
@@ -16,7 +16,7 @@
         "09_no_show_policy.md"
       ],
       "hit": true,
-      "ts": 1784163591.084327
+      "ts": 1784247790.9213362
     },
     {
       "question": "¿Puedo hacer una consulta por videollamada con mi médico?",
@@ -29,7 +29,7 @@
         "04_payments_insurance.md"
       ],
       "hit": true,
-      "ts": 1784163591.269259
+      "ts": 1784247791.398061
     },
     {
       "question": "¿Qué pasa si no me presento a mi turno?",
@@ -41,7 +41,7 @@
         "09_no_show_policy.md"
       ],
       "hit": true,
-      "ts": 1784163591.443825
+      "ts": 1784247791.5764391
     },
     {
       "question": "¿Cómo puedo borrar mi cuenta y mis datos personales?",
@@ -54,7 +54,7 @@
         "07_account_privacy.md"
       ],
       "hit": true,
-      "ts": 1784163591.605771
+      "ts": 1784247791.772287
     },
     {
       "question": "¿DocPlanner verifica las credenciales de los médicos antes de publicar su perfil?",
@@ -67,7 +67,7 @@
         "07_account_privacy.md"
       ],
       "hit": true,
-      "ts": 1784163591.750011
+      "ts": 1784247791.936964
     },
     {
       "question": "¿Puedo pagar la consulta con tarjeta desde la plataforma?",
@@ -79,7 +79,7 @@
         "04_payments_insurance.md"
       ],
       "hit": true,
-      "ts": 1784163591.943027
+      "ts": 1784247792.136108
     },
     {
       "question": "¿Cómo modera DocPlanner las reseñas de pacientes?",
@@ -92,7 +92,7 @@
         "09_no_show_policy.md"
       ],
       "hit": true,
-      "ts": 1784163592.090881
+      "ts": 1784247792.33693
     },
     {
       "question": "¿Qué herramientas tiene una clínica para gestionar la agenda de varios médicos?",
@@ -104,7 +104,7 @@
         "08_clinic_admin_tims.md"
       ],
       "hit": true,
-      "ts": 1784163592.280361
+      "ts": 1784247792.5059772
     },
     {
       "question": "¿Cómo reservo un turno con un especialista?",
@@ -116,7 +116,7 @@
         "02_cancellation_policy.md"
       ],
       "hit": true,
-      "ts": 1784163592.4633842
+      "ts": 1784247792.705493
     },
     {
       "question": "¿Qué pasa si el médico cancela el turno y no el paciente?",
@@ -129,7 +129,7 @@
         "09_no_show_policy.md"
       ],
       "hit": true,
-      "ts": 1784163593.991911
+      "ts": 1784247792.8718212
     }
   ],
   "faithfulness_items": [
@@ -137,61 +137,61 @@
       "question": "¿Cuánto tiempo antes puedo cancelar una cita sin costo?",
       "answer": "Puedes cancelar una cita sin costo si lo haces con al menos **24 horas de anticipación** respecto al horario reservado [02_cancellation_policy.md].",
       "is_faithful": true,
-      "ts": 1784163596.042888
+      "ts": 1784247794.9232588
     },
     {
       "question": "¿Puedo hacer una consulta por videollamada con mi médico?",
       "answer": "Sí, puedes hacer una consulta por videollamada con tu médico si él o ella ha habilitado la modalidad de teleconsulta en su perfil. Debes reservar un turno marcado como \"Teleconsulta\" en el calendario del profesional. Luego, recibirás un enlace único para acceder a la videollamada 15 minutos antes de la consulta. [03_teleconsultation.md]",
       "is_faithful": true,
-      "ts": 1784163598.555228
+      "ts": 1784247797.859654
     },
     {
       "question": "¿Qué pasa si no me presento a mi turno?",
-      "answer": "Si no te presentas a tu turno confirmado (ya sea presencial o teleconsulta) sin haberlo cancelado ni reprogramado con al menos 24 horas de anticipación, se considera un \"no-show\". Un no-show puntual no genera penalización, pero si acumulas 3 o más no-shows en un período de 6 meses, el sistema puede requerir confirmación de pago adelantado para futuras reservas. Además, algunas clínicas pueden aplicar un cargo por no-show, el cual se informa al paciente al momento de reservar, pero este cargo es definido por cada clínica y no por DocPlanner como plataforma. Para reducir la tasa de no-shows, se envían recordatorios automáticos antes del turno y se permite reprogramar fácilmente desde esos recordatorios [09_no_show_policy.md].",
+      "answer": "Si no te presentas a un turno confirmado sin haberlo cancelado ni reprogramado con al menos 24 horas de anticipación, se considera un \"no-show\". Un no-show puntual no genera penalización, pero si acumulas 3 o más no-shows en un período de 6 meses, el sistema puede requerir confirmación de pago adelantado para futuras reservas. Además, algunas clínicas pueden aplicar un cargo por no-show, el cual se informa al paciente al momento de reservar, y este cargo es definido por cada clínica, no por DocPlanner. Para reducir la tasa de no-shows, se envían recordatorios automáticos antes del turno y se permite reprogramar fácilmente desde esos recordatorios [09_no_show_policy.md].",
       "is_faithful": true,
-      "ts": 1784163602.0989282
+      "ts": 1784247800.879936
     },
     {
       "question": "¿Cómo puedo borrar mi cuenta y mis datos personales?",
-      "answer": "Puedes solicitar la eliminación completa de tu cuenta y tus datos personales desde la sección \"Privacidad\" de tu cuenta, o contactando a soporte. La eliminación se procesa dentro de los 30 días, salvo que exista una obligación legal de retención de ciertos datos [07_account_privacy.md].",
+      "answer": "Puedes solicitar la eliminación completa de tu cuenta y tus datos personales desde la sección \"Privacidad\" de tu cuenta, o contactando a soporte. La eliminación se procesará dentro de los 30 días, salvo que exista una obligación legal de retención de ciertos datos [07_account_privacy.md].",
       "is_faithful": true,
-      "ts": 1784163604.383656
+      "ts": 1784247804.0975208
     },
     {
       "question": "¿DocPlanner verifica las credenciales de los médicos antes de publicar su perfil?",
       "answer": "Sí, DocPlanner verifica las credenciales de los médicos antes de que su perfil quede visible públicamente. Este proceso de verificación incluye la validación de la matrícula profesional vigente, la validación de identidad y la validación de la especialidad declarada contra el título habilitante [05_doctor_profiles_faq.md].",
       "is_faithful": true,
-      "ts": 1784163606.9469419
+      "ts": 1784247807.65495
     },
     {
       "question": "¿Puedo pagar la consulta con tarjeta desde la plataforma?",
       "answer": "Sí, puedes pagar la consulta con tarjeta de crédito o débito desde la plataforma al momento de confirmar el turno, siempre que el profesional o clínica lo haya configurado para aceptar pago online. [04_payments_insurance.md]",
       "is_faithful": true,
-      "ts": 1784163609.193793
+      "ts": 1784247809.547505
     },
     {
       "question": "¿Cómo modera DocPlanner las reseñas de pacientes?",
       "answer": "DocPlanner modera las reseñas de pacientes a través de un filtro automático que detecta lenguaje ofensivo, datos personales (como números de teléfono y direcciones), o contenido que viole las políticas de la plataforma. Las reseñas que son marcadas por este filtro pasan a revisión manual por parte del equipo de moderación en un plazo de 24 a 48 horas antes de ser publicadas. [06_reviews_ratings.md]",
       "is_faithful": true,
-      "ts": 1784163611.413032
+      "ts": 1784247812.574368
     },
     {
       "question": "¿Qué herramientas tiene una clínica para gestionar la agenda de varios médicos?",
       "answer": "Una clínica puede gestionar la agenda de varios médicos utilizando el panel de administración de práctica (Practice Console) de DocPlanner. Este panel permite ver y administrar la agenda de todos los profesionales desde una vista unificada de calendario, asignar turnos manualmente (por ejemplo, para turnos que llegan por teléfono), y bloquear horarios por vacaciones o licencias. Además, ofrece sincronización bidireccional con calendarios externos como Google Calendar y Outlook, lo que facilita la gestión de la disponibilidad real de los profesionales [08_clinic_admin_tims.md].",
       "is_faithful": true,
-      "ts": 1784163614.0098088
+      "ts": 1784247815.783542
     },
     {
       "question": "¿Cómo reservo un turno con un especialista?",
       "answer": "Para reservar un turno con un especialista en DocPlanner, sigue estos pasos:\n\n1. Busca un especialista utilizando los filtros de búsqueda disponibles (especialidad, ubicación, seguro, idioma).\n2. Selecciona el perfil del médico y revisa su calendario de disponibilidad en tiempo real, que está sincronizado con la agenda de la clínica.\n3. Elige un horario disponible y confirma el motivo de consulta (primera vez, control, urgencia).\n4. Si la clínica lo requiere, completa un formulario previo con datos básicos (motivo de consulta, obra social, datos de contacto).\n5. El sistema enviará una confirmación por email y SMS, con la opción de agregar el turno a tu calendario personal (Google Calendar, iCal) [01_booking_policy.md].",
       "is_faithful": true,
-      "ts": 1784163617.687378
+      "ts": 1784247819.238546
     },
     {
       "question": "¿Qué pasa si el médico cancela el turno y no el paciente?",
-      "answer": "Si es la clínica o el profesional quien cancela el turno (por ejemplo, por una emergencia), el paciente recibe una notificación inmediata por email y SMS, con la opción de reprogramar automáticamente con el mismo profesional o buscar otro especialista disponible en un horario similar. En estos casos nunca se aplica ningún cargo al paciente. [02_cancellation_policy.md]",
+      "answer": "Si es la clínica o el profesional quien cancela el turno (por ejemplo, por una emergencia), el paciente recibe una notificación inmediata por email y SMS, con la opción de reprogramar automáticamente con el mismo profesional o buscar otro especialista disponible en un horario similar. En estos casos nunca se aplica ningún cargo al paciente [02_cancellation_policy.md].",
       "is_faithful": true,
-      "ts": 1784163620.668017
+      "ts": 1784247821.54636
     }
   ],
   "rag_recall": 1.0,
@@ -214,7 +214,7 @@
         "03_teleconsultation.md",
         "05_doctor_profiles_faq.md"
       ],
-      "ts": 1784163620.8820019
+      "ts": 1784247821.723743
     },
     {
       "question": "¿Puedo hacer una consulta por videollamada con mi médico?",
@@ -234,7 +234,7 @@
         "03_teleconsultation.md",
         "04_payments_insurance.md"
       ],
-      "ts": 1784163621.106823
+      "ts": 1784247821.922513
     },
     {
       "question": "¿Qué pasa si no me presento a mi turno?",
@@ -251,7 +251,7 @@
         "01_booking_policy.md",
         "02_cancellation_policy.md"
       ],
-      "ts": 1784163621.2806559
+      "ts": 1784247822.09341
     },
     {
       "question": "¿Cómo puedo borrar mi cuenta y mis datos personales?",
@@ -269,7 +269,7 @@
         "01_booking_policy.md",
         "07_account_privacy.md"
       ],
-      "ts": 1784163621.4703848
+      "ts": 1784247822.2779388
     },
     {
       "question": "¿DocPlanner verifica las credenciales de los médicos antes de publicar su perfil?",
@@ -288,7 +288,7 @@
         "04_payments_insurance.md",
         "05_doctor_profiles_faq.md"
       ],
-      "ts": 1784163621.651634
+      "ts": 1784247822.473428
     },
     {
       "question": "¿Puedo pagar la consulta con tarjeta desde la plataforma?",
@@ -305,7 +305,7 @@
         "01_booking_policy.md",
         "04_payments_insurance.md"
       ],
-      "ts": 1784163621.816909
+      "ts": 1784247822.962058
     },
     {
       "question": "¿Cómo modera DocPlanner las reseñas de pacientes?",
@@ -325,7 +325,7 @@
         "05_doctor_profiles_faq.md",
         "06_reviews_ratings.md"
       ],
-      "ts": 1784163621.98618
+      "ts": 1784247823.279472
     },
     {
       "question": "¿Qué herramientas tiene una clínica para gestionar la agenda de varios médicos?",
@@ -343,7 +343,7 @@
         "04_payments_insurance.md",
         "08_clinic_admin_tims.md"
       ],
-      "ts": 1784163622.1741812
+      "ts": 1784247823.4804149
     },
     {
       "question": "¿Cómo reservo un turno con un especialista?",
@@ -360,7 +360,7 @@
         "01_booking_policy.md",
         "02_cancellation_policy.md"
       ],
-      "ts": 1784163622.343814
+      "ts": 1784247823.6340659
     },
     {
       "question": "¿Qué pasa si el médico cancela el turno y no el paciente?",
@@ -379,7 +379,315 @@
         "02_cancellation_policy.md",
         "04_payments_insurance.md"
       ],
-      "ts": 1784163622.5315342
+      "ts": 1784247823.8051252
     }
-  ]
+  ],
+  "no_rerank_recall": 1.0,
+  "rerank_recall": 1.0,
+  "rerank_compare_items": [
+    {
+      "question": "¿Cuánto tiempo antes puedo cancelar una cita sin costo?",
+      "expected_sources": [
+        "02_cancellation_policy.md"
+      ],
+      "no_rerank_hit": true,
+      "no_rerank_sources": [
+        "02_cancellation_policy.md",
+        "04_payments_insurance.md",
+        "09_no_show_policy.md"
+      ],
+      "rerank_hit": true,
+      "rerank_sources": [
+        "02_cancellation_policy.md",
+        "04_payments_insurance.md",
+        "09_no_show_policy.md"
+      ],
+      "ts": 1784247825.2170272
+    },
+    {
+      "question": "¿Puedo hacer una consulta por videollamada con mi médico?",
+      "expected_sources": [
+        "03_teleconsultation.md"
+      ],
+      "no_rerank_hit": true,
+      "no_rerank_sources": [
+        "02_cancellation_policy.md",
+        "03_teleconsultation.md",
+        "04_payments_insurance.md"
+      ],
+      "rerank_hit": true,
+      "rerank_sources": [
+        "02_cancellation_policy.md",
+        "03_teleconsultation.md",
+        "04_payments_insurance.md"
+      ],
+      "ts": 1784247827.176663
+    },
+    {
+      "question": "¿Qué pasa si no me presento a mi turno?",
+      "expected_sources": [
+        "09_no_show_policy.md"
+      ],
+      "no_rerank_hit": true,
+      "no_rerank_sources": [
+        "02_cancellation_policy.md",
+        "09_no_show_policy.md"
+      ],
+      "rerank_hit": true,
+      "rerank_sources": [
+        "02_cancellation_policy.md",
+        "09_no_show_policy.md"
+      ],
+      "ts": 1784247828.743377
+    },
+    {
+      "question": "¿Cómo puedo borrar mi cuenta y mis datos personales?",
+      "expected_sources": [
+        "07_account_privacy.md"
+      ],
+      "no_rerank_hit": true,
+      "no_rerank_sources": [
+        "02_cancellation_policy.md",
+        "05_doctor_profiles_faq.md",
+        "07_account_privacy.md"
+      ],
+      "rerank_hit": true,
+      "rerank_sources": [
+        "02_cancellation_policy.md",
+        "05_doctor_profiles_faq.md",
+        "07_account_privacy.md"
+      ],
+      "ts": 1784247830.6979148
+    },
+    {
+      "question": "¿DocPlanner verifica las credenciales de los médicos antes de publicar su perfil?",
+      "expected_sources": [
+        "05_doctor_profiles_faq.md"
+      ],
+      "no_rerank_hit": true,
+      "no_rerank_sources": [
+        "01_booking_policy.md",
+        "05_doctor_profiles_faq.md",
+        "07_account_privacy.md"
+      ],
+      "rerank_hit": true,
+      "rerank_sources": [
+        "01_booking_policy.md",
+        "05_doctor_profiles_faq.md",
+        "07_account_privacy.md"
+      ],
+      "ts": 1784247832.2029
+    },
+    {
+      "question": "¿Puedo pagar la consulta con tarjeta desde la plataforma?",
+      "expected_sources": [
+        "04_payments_insurance.md"
+      ],
+      "no_rerank_hit": true,
+      "no_rerank_sources": [
+        "03_teleconsultation.md",
+        "04_payments_insurance.md"
+      ],
+      "rerank_hit": true,
+      "rerank_sources": [
+        "03_teleconsultation.md",
+        "04_payments_insurance.md"
+      ],
+      "ts": 1784247833.646113
+    },
+    {
+      "question": "¿Cómo modera DocPlanner las reseñas de pacientes?",
+      "expected_sources": [
+        "06_reviews_ratings.md"
+      ],
+      "no_rerank_hit": true,
+      "no_rerank_sources": [
+        "06_reviews_ratings.md",
+        "07_account_privacy.md",
+        "09_no_show_policy.md"
+      ],
+      "rerank_hit": true,
+      "rerank_sources": [
+        "06_reviews_ratings.md",
+        "07_account_privacy.md",
+        "09_no_show_policy.md"
+      ],
+      "ts": 1784247835.280698
+    },
+    {
+      "question": "¿Qué herramientas tiene una clínica para gestionar la agenda de varios médicos?",
+      "expected_sources": [
+        "08_clinic_admin_tims.md"
+      ],
+      "no_rerank_hit": true,
+      "no_rerank_sources": [
+        "01_booking_policy.md",
+        "08_clinic_admin_tims.md"
+      ],
+      "rerank_hit": true,
+      "rerank_sources": [
+        "01_booking_policy.md",
+        "05_doctor_profiles_faq.md",
+        "08_clinic_admin_tims.md"
+      ],
+      "ts": 1784247837.0534122
+    },
+    {
+      "question": "¿Cómo reservo un turno con un especialista?",
+      "expected_sources": [
+        "01_booking_policy.md"
+      ],
+      "no_rerank_hit": true,
+      "no_rerank_sources": [
+        "01_booking_policy.md",
+        "02_cancellation_policy.md"
+      ],
+      "rerank_hit": true,
+      "rerank_sources": [
+        "01_booking_policy.md",
+        "02_cancellation_policy.md"
+      ],
+      "ts": 1784247838.680798
+    },
+    {
+      "question": "¿Qué pasa si el médico cancela el turno y no el paciente?",
+      "expected_sources": [
+        "02_cancellation_policy.md"
+      ],
+      "no_rerank_hit": true,
+      "no_rerank_sources": [
+        "02_cancellation_policy.md",
+        "07_account_privacy.md",
+        "09_no_show_policy.md"
+      ],
+      "rerank_hit": true,
+      "rerank_sources": [
+        "02_cancellation_policy.md",
+        "09_no_show_policy.md"
+      ],
+      "ts": 1784247840.6091578
+    }
+  ],
+  "classifier_accuracy": 1.0,
+  "rag_top1_accuracy": 1.0,
+  "classifier_items": [
+    {
+      "question": "¿Cuánto tiempo antes puedo cancelar una cita sin costo?",
+      "expected_sources": [
+        "02_cancellation_policy.md"
+      ],
+      "classifier_prediction": "02_cancellation_policy.md",
+      "classifier_hit": true,
+      "rag_top1": "02_cancellation_policy.md",
+      "rag_hit": true,
+      "ts": 1784247840.762031
+    },
+    {
+      "question": "¿Puedo hacer una consulta por videollamada con mi médico?",
+      "expected_sources": [
+        "03_teleconsultation.md"
+      ],
+      "classifier_prediction": "03_teleconsultation.md",
+      "classifier_hit": true,
+      "rag_top1": "03_teleconsultation.md",
+      "rag_hit": true,
+      "ts": 1784247840.93077
+    },
+    {
+      "question": "¿Qué pasa si no me presento a mi turno?",
+      "expected_sources": [
+        "09_no_show_policy.md"
+      ],
+      "classifier_prediction": "09_no_show_policy.md",
+      "classifier_hit": true,
+      "rag_top1": "09_no_show_policy.md",
+      "rag_hit": true,
+      "ts": 1784247841.109591
+    },
+    {
+      "question": "¿Cómo puedo borrar mi cuenta y mis datos personales?",
+      "expected_sources": [
+        "07_account_privacy.md"
+      ],
+      "classifier_prediction": "07_account_privacy.md",
+      "classifier_hit": true,
+      "rag_top1": "07_account_privacy.md",
+      "rag_hit": true,
+      "ts": 1784247841.3083441
+    },
+    {
+      "question": "¿DocPlanner verifica las credenciales de los médicos antes de publicar su perfil?",
+      "expected_sources": [
+        "05_doctor_profiles_faq.md"
+      ],
+      "classifier_prediction": "05_doctor_profiles_faq.md",
+      "classifier_hit": true,
+      "rag_top1": "05_doctor_profiles_faq.md",
+      "rag_hit": true,
+      "ts": 1784247841.636956
+    },
+    {
+      "question": "¿Puedo pagar la consulta con tarjeta desde la plataforma?",
+      "expected_sources": [
+        "04_payments_insurance.md"
+      ],
+      "classifier_prediction": "04_payments_insurance.md",
+      "classifier_hit": true,
+      "rag_top1": "04_payments_insurance.md",
+      "rag_hit": true,
+      "ts": 1784247841.7962089
+    },
+    {
+      "question": "¿Cómo modera DocPlanner las reseñas de pacientes?",
+      "expected_sources": [
+        "06_reviews_ratings.md"
+      ],
+      "classifier_prediction": "06_reviews_ratings.md",
+      "classifier_hit": true,
+      "rag_top1": "06_reviews_ratings.md",
+      "rag_hit": true,
+      "ts": 1784247841.963539
+    },
+    {
+      "question": "¿Qué herramientas tiene una clínica para gestionar la agenda de varios médicos?",
+      "expected_sources": [
+        "08_clinic_admin_tims.md"
+      ],
+      "classifier_prediction": "08_clinic_admin_tims.md",
+      "classifier_hit": true,
+      "rag_top1": "08_clinic_admin_tims.md",
+      "rag_hit": true,
+      "ts": 1784247842.138906
+    },
+    {
+      "question": "¿Cómo reservo un turno con un especialista?",
+      "expected_sources": [
+        "01_booking_policy.md"
+      ],
+      "classifier_prediction": "01_booking_policy.md",
+      "classifier_hit": true,
+      "rag_top1": "01_booking_policy.md",
+      "rag_hit": true,
+      "ts": 1784247842.2890801
+    },
+    {
+      "question": "¿Qué pasa si el médico cancela el turno y no el paciente?",
+      "expected_sources": [
+        "02_cancellation_policy.md"
+      ],
+      "classifier_prediction": "02_cancellation_policy.md",
+      "classifier_hit": true,
+      "rag_top1": "02_cancellation_policy.md",
+      "rag_hit": true,
+      "ts": 1784247842.486943
+    }
+  ],
+  "consistency": {
+    "question": "¿Cuánto tiempo antes puedo cancelar una cita sin costo?",
+    "n_runs": 5,
+    "n_unique_answers": 1,
+    "exact_match_rate": 1.0,
+    "sources_agree": true,
+    "avg_jaccard_similarity": 1.0
+  }
 }

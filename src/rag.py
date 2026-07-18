@@ -41,11 +41,21 @@ def answer(
     on_event: EventCallback | None = None,
     api_key: str | None = None,
     session_id: str | None = None,
+    rerank: bool = False,
 ) -> dict:
     emit(on_event, "question_received", question=question, top_k=top_k or config.TOP_K)
 
     try:
-        chunks = retrieve(question, top_k=top_k, on_event=on_event, api_key=api_key, session_id=session_id)
+        if rerank:
+            # Over-retrieve so the reranker has real candidates to sort
+            # through, not just the top_k it would already return.
+            from .reranker import rerank_chunks
+            candidates = retrieve(
+                question, top_k=config.RERANK_CANDIDATES, on_event=on_event, api_key=api_key, session_id=session_id
+            )
+            chunks = rerank_chunks(question, candidates, top_k=top_k or config.TOP_K, on_event=on_event, api_key=api_key)
+        else:
+            chunks = retrieve(question, top_k=top_k, on_event=on_event, api_key=api_key, session_id=session_id)
 
         if not chunks:
             emit(on_event, "no_context")

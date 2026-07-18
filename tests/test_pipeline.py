@@ -17,6 +17,8 @@ from __future__ import annotations
 import numpy as np
 
 from src.chunking import chunk_text
+from src.classifier import fit_nearest_centroid, predict_nearest_centroid
+from src.tokenizer_demo import tokenize_text
 from src.vector_store import SimpleVectorStore
 
 
@@ -58,7 +60,47 @@ def test_vector_store_roundtrip():
           f"(score={results[0]['score']:.3f})")
 
 
+def test_tokenizer():
+    # No API key needed: tiktoken's vocab is vendored locally (see
+    # config.TIKTOKEN_CACHE_DIR), so this never touches the network.
+    result = tokenize_text("hola mundo")
+    assert result["n_tokens"] > 0
+    assert result["n_words"] == 2
+    assert sum(len(t["text"]) for t in result["tokens"]) == len("hola mundo")
+    print(f"OK tokenizer: 'hola mundo' -> {result['n_tokens']} tokens "
+          f"({result['encoding']})")
+
+
+def test_classifier():
+    store = SimpleVectorStore()
+    docs = {
+        "cancellation.md": [
+            "cancelar la cita hasta 24 horas antes sin costo",
+            "cancelacion tardia puede generar un cargo",
+        ],
+        "payments.md": [
+            "el pago se puede hacer con tarjeta de credito o debito",
+            "reembolsos se procesan en cinco dias habiles",
+        ],
+    }
+    for source, texts in docs.items():
+        vectors = [fake_embed(t) for t in texts]
+        metas = [{"source": source, "chunk_index": i, "text": t} for i, t in enumerate(texts)]
+        store.add(vectors, metas)
+
+    basis = fit_nearest_centroid(store)
+    assert set(basis["labels"]) == set(docs.keys())
+
+    query_vector = fake_embed("quiero cancelar mi cita sin pagar nada")
+    predicted, scores = predict_nearest_centroid(basis, query_vector)
+    assert predicted in docs
+    assert set(scores.keys()) == set(docs.keys())
+    print(f"OK classifier: 'quiero cancelar...' -> predicho {predicted}")
+
+
 if __name__ == "__main__":
     test_chunking()
     test_vector_store_roundtrip()
+    test_tokenizer()
+    test_classifier()
     print("\nTodos los smoke tests pasaron sin necesidad de API key.")

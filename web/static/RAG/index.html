@@ -65,7 +65,14 @@
     "Embeddings-based search vs. keyword search",
     "Recall@K",
     "LLM-as-a-judge / Faithfulness evaluation",
-    "ReAct agents and tool calling"
+    "ReAct agents and tool calling",
+    "Tokenization (tiktoken)",
+    "Prompt engineering (zero-shot / few-shot / chain-of-thought)",
+    "Temperature and sampling",
+    "Structured outputs (json_schema mode)",
+    "Fine-tuning vs. RAG (conceptual walkthrough + a real toy classifier)",
+    "LLM-based reranking",
+    "Consistency / robustness evaluation"
   ],
   "author": {
     "@type": "Person",
@@ -238,8 +245,10 @@
 <nav class="tabs">
   <button class="tab-btn active" data-tab="init">1. Build the Index</button>
   <button class="tab-btn" data-tab="ask">2. Ask a Question</button>
-  <button class="tab-btn" data-tab="explore">3. Explore the Data</button>
-  <button class="tab-btn" data-tab="metrics">4. Metrics &amp; Concepts</button>
+  <button class="tab-btn" data-tab="prompting">3. Prompting Lab</button>
+  <button class="tab-btn" data-tab="training">4. Training</button>
+  <button class="tab-btn" data-tab="explore">5. Explore the Data</button>
+  <button class="tab-btn" data-tab="metrics">6. Metrics &amp; Concepts</button>
 </nav>
 
 <main>
@@ -370,6 +379,11 @@
 
       <!-- ==================== MODE: CLASSIC RAG ==================== -->
       <div id="ask-mode-classic" class="ask-mode-panel active">
+        <label class="rerank-toggle">
+          <input type="checkbox" id="rerank-toggle" />
+          Rerank retrieved chunks with an LLM-based reranker before answering
+          <span class="info-icon" tabindex="0" data-tooltip="Over-retrieves 8 candidates (instead of the usual 4) and asks the chat model to score all of them for relevance in one batched call, then keeps the top 4 by that score instead of by cosine similarity alone. See the Metrics tab for a measured recall comparison with vs. without this step.">ⓘ</span>
+        </label>
         <p class="muted small click-hint">Click any box below to see exactly what it produced.</p>
         <div class="pipeline" id="pipeline-ask">
           <div class="pbox" data-box="question" tabindex="0">
@@ -509,6 +523,13 @@
           </div>
         </div>
 
+        <div id="rerank-info" class="card" hidden>
+          <h3>Reranking: before → after
+            <span class="info-icon" tabindex="0" data-tooltip="8 candidates were retrieved by cosine similarity, then the LLM reranker scored all of them and this is what it kept as the top 4.">ⓘ</span>
+          </h3>
+          <div id="rerank-info-content"></div>
+        </div>
+
         <details class="log-details">
           <summary>Raw event log</summary>
           <div id="log-ask" class="event-log"></div>
@@ -563,6 +584,188 @@
     </div>
   </section>
 
+  <!-- ======================= TAB: PROMPTING LAB ======================= -->
+  <section id="tab-prompting" class="tab-panel">
+    <p class="hint">
+      Same retrieved context, different LLM techniques — run side by side so the effect of each
+      is something you watch happen, not a claim to take on faith. Every mode below reuses the
+      same retrieval step from "Ask a Question," it only changes what happens after the context
+      is retrieved.
+    </p>
+
+    <div class="mode-tabs">
+      <button class="mode-btn active" data-prompt-mode="variants" type="button">Zero/Few-shot/CoT</button>
+      <button class="mode-btn" data-prompt-mode="temperature" type="button">Temperature</button>
+      <button class="mode-btn" data-prompt-mode="structured" type="button">Structured output</button>
+    </div>
+
+    <!-- ==================== MODE: PROMPT VARIANTS ==================== -->
+    <div id="prompting-mode-variants" class="ask-mode-panel active">
+      <div class="panel">
+        <div class="panel-row">
+          <input id="prompting-variants-input" type="text" class="text-input" placeholder="Type your question (in Spanish)…" autocomplete="off" value="¿Cuánto tiempo antes puedo cancelar una cita sin costo?" />
+          <button id="btn-prompting-variants" class="btn btn-primary">Run all 3</button>
+        </div>
+        <p id="prompting-variants-disabled-hint" class="muted small" hidden>
+          Build the index first, in the "Build the Index" tab.
+        </p>
+        <div class="grid-3" id="prompting-variants-grid">
+          <div class="card">
+            <h3>Zero-shot
+              <span class="info-icon" tabindex="0" data-tooltip="No examples given — just the instructions and the retrieved context. The baseline every other technique is compared against.">ⓘ</span>
+            </h3>
+            <div class="answer-box" id="prompting-variant-zero_shot"><p class="muted">Run a question above.</p></div>
+          </div>
+          <div class="card">
+            <h3>Few-shot
+              <span class="info-icon" tabindex="0" data-tooltip="A couple of real question→answer examples (in the same cited-source format) are prepended to the prompt, so the model has a concrete pattern to imitate instead of only abstract instructions.">ⓘ</span>
+            </h3>
+            <div class="answer-box" id="prompting-variant-few_shot"><p class="muted">Run a question above.</p></div>
+          </div>
+          <div class="card">
+            <h3>Chain-of-Thought
+              <span class="info-icon" tabindex="0" data-tooltip="The model is asked to reason step by step under a 'Razonamiento:' heading before writing the final 'Respuesta:' — often catches cases where the direct answer would have skipped a relevant detail.">ⓘ</span>
+            </h3>
+            <div class="answer-box" id="prompting-variant-cot"><p class="muted">Run a question above.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== MODE: TEMPERATURE PLAYGROUND ==================== -->
+    <div id="prompting-mode-temperature" class="ask-mode-panel" hidden>
+      <div class="panel">
+        <div class="panel-row">
+          <input id="prompting-temperature-input" type="text" class="text-input" placeholder="Type your question (in Spanish)…" autocomplete="off" value="¿Cómo reservo un turno con un especialista?" />
+          <button id="btn-prompting-temperature" class="btn btn-primary">Run all temperatures</button>
+        </div>
+        <p id="prompting-temperature-disabled-hint" class="muted small" hidden>
+          Build the index first, in the "Build the Index" tab.
+        </p>
+        <p class="muted small">
+          Same question, same prompt, run once per temperature value — determinism vs. creativity,
+          live instead of asserted.
+        </p>
+        <div class="grid-3" id="prompting-temperature-grid"></div>
+      </div>
+    </div>
+
+    <!-- ==================== MODE: STRUCTURED OUTPUT ==================== -->
+    <div id="prompting-mode-structured" class="ask-mode-panel" hidden>
+      <div class="panel">
+        <div class="panel-row">
+          <input id="prompting-structured-input" type="text" class="text-input" placeholder="Type your question (in Spanish)…" autocomplete="off" value="¿Puedo pagar la consulta con tarjeta desde la plataforma?" />
+          <button id="btn-prompting-structured" class="btn btn-primary">Run both</button>
+        </div>
+        <p id="prompting-structured-disabled-hint" class="muted small" hidden>
+          Build the index first, in the "Build the Index" tab.
+        </p>
+        <p class="muted small">
+          Complements Agentic RAG's tool-calling (the model decides <em>whether</em> to call a tool)
+          with the other half of "structured" output: the final answer itself constrained to a
+          schema, not a decision about what to call next.
+        </p>
+        <div class="grid-2">
+          <div class="card">
+            <h3>Structured (json_schema mode)</h3>
+            <div id="prompting-structured-result" class="answer-box"><p class="muted">Run a question above.</p></div>
+          </div>
+          <div class="card">
+            <h3>Free text (same prompt)</h3>
+            <div id="prompting-freetext-result" class="answer-box"><p class="muted">Run a question above.</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ======================= TAB: TRAINING ======================= -->
+  <section id="tab-training" class="tab-panel">
+    <p class="hint">
+      Every other tab in this demo is RAG: no training, just an index built once and searched at
+      question time. This tab shows the other half of the picture — what an actual fine-tuning
+      training example looks like, and a real (if small) training loop, so the RAG-vs-fine-tuning
+      tradeoff is something you can compare directly instead of taking on faith.
+    </p>
+
+    <div class="mode-tabs">
+      <button class="mode-btn active" data-training-mode="finetune" type="button">Fine-tuning (illustrative)</button>
+      <button class="mode-btn" data-training-mode="classifier" type="button">A real toy classifier</button>
+    </div>
+
+    <!-- ==================== MODE: FINE-TUNING ILLUSTRATION ==================== -->
+    <div id="training-mode-finetune" class="ask-mode-panel active">
+      <div class="panel">
+        <p class="muted small">
+          These are the 10 golden-dataset questions, each paired with a real excerpt from its
+          expected source document, formatted as an actual OpenAI fine-tuning JSONL record
+          (<code>{"messages": [...]}</code>). <strong>No training actually happens here and no
+          OpenAI call is made</strong> — this only shows the shape of the input a real fine-tuning
+          job would need. In a real fine-tuning run the "assistant" turn would be a hand-written
+          ideal answer, not a raw document excerpt like below — that's simplified here on purpose,
+          to avoid inventing 10 answers that would look authoritative but weren't actually curated.
+        </p>
+        <div id="finetune-examples"><p class="muted">Loading…</p></div>
+
+        <h4>RAG vs. fine-tuning, for this project specifically</h4>
+        <div class="db-table-wrap">
+          <table class="db-table">
+            <thead><tr><th></th><th>RAG (this demo)</th><th>Fine-tuning</th></tr></thead>
+            <tbody>
+              <tr><td>Update the knowledge base</td><td>Edit a markdown file, re-run ingestion (minutes)</td><td>Retrain the model (hours, real cost)</td></tr>
+              <tr><td>Cites its sources</td><td>Yes — every answer names the document it used</td><td>No — the answer's origin is baked into weights, untraceable</td></tr>
+              <tr><td>Training data needed</td><td>None — just the documents themselves</td><td>Hundreds+ of curated examples for a real gain</td></tr>
+              <tr><td>What it's good at</td><td>Facts that change, need citing, or are numerous</td><td>Consistent tone/format, or a narrow skill baked in</td></tr>
+              <tr><td>Cost profile here</td><td>Pay per question (embedding + one chat call)</td><td>Upfront training cost, then cheaper per question</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== MODE: TOY CLASSIFIER ==================== -->
+    <div id="training-mode-classifier" class="ask-mode-panel" hidden>
+      <div class="panel">
+        <p class="muted small">
+          A genuinely real training step, kept small on purpose: a nearest-centroid classifier
+          (pure numpy, no new dependency) trained on the ~20 chunk vectors already in the index —
+          one centroid per source document. With only 2-3 examples per class, this will not
+          generalize richly, and that's the point: it's why RAG (which needs no training data at
+          all) is the more practical fit for a knowledge base this size.
+        </p>
+        <div class="panel-row">
+          <button id="btn-classifier-train" class="btn btn-primary">Train it</button>
+        </div>
+        <div id="classifier-train-result"></div>
+
+        <h4 style="margin-top:1.2rem">Classifier vs. RAG top-1, on the 10 held-out questions</h4>
+        <p class="muted small" id="classifier-compare-source-label"></p>
+        <div class="panel-row">
+          <button id="btn-classifier-compare" class="btn btn-primary">Run comparison live</button>
+          <span id="classifier-compare-progress" class="progress-text"></span>
+        </div>
+        <div class="grid-2" id="classifier-compare-scores">
+          <div class="metric-tile">
+            <div class="metric-value" id="metric-classifier-accuracy">—</div>
+            <div class="metric-label">Classifier accuracy</div>
+          </div>
+          <div class="metric-tile">
+            <div class="metric-value" id="metric-rag-top1-accuracy">—</div>
+            <div class="metric-label">RAG top-1 accuracy</div>
+          </div>
+        </div>
+        <div id="classifier-compare-table-section" hidden>
+          <h4>Per question</h4>
+          <div id="classifier-compare-table"></div>
+        </div>
+        <details class="log-details">
+          <summary>Raw event log</summary>
+          <div id="log-classifier-compare" class="event-log"></div>
+        </details>
+      </div>
+    </div>
+  </section>
+
   <!-- ======================= TAB: EXPLORE THE DATA ======================= -->
   <section id="tab-explore" class="tab-panel">
     <p class="hint">
@@ -602,7 +805,17 @@
       </div>
 
       <div class="card">
-        <h3>4. See the code
+        <h3>4. Tokenize it
+          <span class="info-icon" tabindex="0" data-tooltip="Chunking counts words as a cheap proxy for tokens (see card 3) — this shows the real tokenizer gpt-4o-mini uses (o200k_base, via tiktoken), running locally with no OpenAI call, so the word-to-token ratio is a measured number instead of an assumption.">ⓘ</span>
+        </h3>
+        <textarea id="tokenizer-input" class="text-input" rows="3" placeholder="Type or paste text to tokenize…">¿Cuánto tiempo antes puedo cancelar sin que me cobren?</textarea>
+        <button id="tokenizer-run-btn" class="btn">Tokenize</button>
+        <div id="tokenizer-stats" class="muted small"></div>
+        <div id="tokenizer-viz" class="token-viz"></div>
+      </div>
+
+      <div class="card">
+        <h3>5. See the code
           <span class="info-icon" tabindex="0" data-tooltip="Fetched live from the running server with Python's inspect.getsource() — this is guaranteed to be the exact code that produced everything you see on this page, not a hand-written copy.">ⓘ</span>
         </h3>
         <div class="code-picker" id="code-picker">
@@ -612,6 +825,12 @@
           <button class="chip-btn" data-code-key="vector_store_search">Searching vectors</button>
           <button class="chip-btn" data-code-key="prompt">Building the prompt</button>
           <button class="chip-btn" data-code-key="agentic_loop">Agentic loop</button>
+          <button class="chip-btn" data-code-key="tokenizer">Tokenizer</button>
+          <button class="chip-btn" data-code-key="prompting_variants">Prompt variants</button>
+          <button class="chip-btn" data-code-key="structured_output">Structured output</button>
+          <button class="chip-btn" data-code-key="reranker">Reranker</button>
+          <button class="chip-btn" data-code-key="finetune_illustration">Fine-tuning example</button>
+          <button class="chip-btn" data-code-key="classifier">Toy classifier</button>
         </div>
         <div id="code-viewer" class="code-viewer"></div>
       </div>
@@ -717,6 +936,64 @@
       </div>
 
       <div class="card">
+        <h3>Reranking: with vs. without
+          <span class="info-icon" tabindex="0" data-tooltip="Runs evaluate_rerank_comparison() from eval/evaluate.py: 8 candidates are retrieved by cosine similarity for each golden question, then Recall@4 is measured on that same pool both before and after the LLM-based reranker (src/reranker.py) re-scores and re-sorts it.">ⓘ</span>
+        </h3>
+        <p class="muted small">
+          Same 8-candidate pool both times — the only difference is whether it gets re-scored by
+          the chat model before being cut down to the top 4. On a 9-document knowledge base where
+          Recall@K is already high, don't expect a dramatic lift: the number below is what actually
+          happened, not a sales pitch.
+        </p>
+        <p id="rerank-compare-source-label" class="muted small"></p>
+        <div class="panel-row">
+          <button id="btn-rerank-compare" class="btn btn-primary">Run comparison live</button>
+          <span id="rerank-compare-progress" class="progress-text"></span>
+        </div>
+
+        <div class="grid-2" id="rerank-compare-scores">
+          <div class="metric-tile">
+            <div class="metric-value" id="metric-no-rerank-recall">—</div>
+            <div class="metric-label">Recall@K — without reranking</div>
+          </div>
+          <div class="metric-tile">
+            <div class="metric-value" id="metric-rerank-recall">—</div>
+            <div class="metric-label">Recall@K — with reranking</div>
+          </div>
+        </div>
+
+        <div id="rerank-compare-table-section" hidden>
+          <h4>Per question</h4>
+          <div id="rerank-compare-table"></div>
+        </div>
+
+        <details class="log-details">
+          <summary>Raw event log</summary>
+          <div id="log-rerank-compare" class="event-log"></div>
+        </details>
+      </div>
+
+      <div class="card">
+        <h3>Consistency / robustness
+          <span class="info-icon" tabindex="0" data-tooltip="Runs evaluate_consistency() from eval/evaluate.py: the same question through answer() 5 times, always at temperature=0. Measures whether the answer text, cited sources, and word overlap actually stay consistent across real API calls — temperature=0 usually means near-deterministic, not guaranteed.">ⓘ</span>
+        </h3>
+        <p class="muted small">
+          Same question, 5 separate calls, always temperature=0. A real measurement of how
+          repeatable the answers actually are — not an assumption about what "deterministic" means.
+        </p>
+        <p id="consistency-source-label" class="muted small"></p>
+        <div class="panel-row">
+          <button id="btn-consistency" class="btn btn-primary">Run comparison live</button>
+          <span id="consistency-progress" class="progress-text"></span>
+        </div>
+        <div id="consistency-result"></div>
+        <details class="log-details">
+          <summary>Raw event log</summary>
+          <div id="log-consistency" class="event-log"></div>
+        </details>
+      </div>
+
+      <div class="card">
         <h3>Where the time goes
           <span class="info-icon" tabindex="0" data-tooltip="Real per-stage timings captured from the actual SSE events during your last question — not simulated. Ask a question in tab 2 to populate this.">ⓘ</span>
         </h3>
@@ -724,6 +1001,10 @@
           <p class="muted">No question asked yet this session — ask one in the "Ask a Question" tab.</p>
         </div>
         <div id="latency-distribution"></div>
+        <h4 style="margin-top:1rem">Latency by technique
+          <span class="info-icon" tabindex="0" data-tooltip="Real client-measured latency for every technique you've actually run this session, not simulated — run something in the Prompting Lab or Training tabs to add rows here.">ⓘ</span>
+        </h4>
+        <div id="technique-latency"><p class="muted small">No technique run yet this session.</p></div>
       </div>
 
       <div class="card">

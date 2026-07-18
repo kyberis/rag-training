@@ -23,15 +23,21 @@ from datetime import datetime, timezone
 
 from src import config
 from .evaluate import (
+    evaluate_classifier_vs_rag,
+    evaluate_consistency,
     evaluate_faithfulness,
     evaluate_recall_at_k,
+    evaluate_rerank_comparison,
     evaluate_retrieval_comparison,
     load_golden_dataset,
 )
 
 
 def generate() -> dict:
-    events: dict[str, list] = {"recall_item": [], "faithfulness_item": [], "compare_item": []}
+    events: dict[str, list] = {
+        "recall_item": [], "faithfulness_item": [], "compare_item": [], "rerank_compare_item": [],
+        "classifier_item": [],
+    }
 
     def on_event(name: str, payload: dict) -> None:
         if name in events:
@@ -44,6 +50,12 @@ def generate() -> dict:
     faithfulness = evaluate_faithfulness(golden, on_event=on_event)
     print("\n=== Comparando embeddings vs. keyword search ===")
     comparison = evaluate_retrieval_comparison(golden, on_event=on_event)
+    print("\n=== Comparando con vs. sin reranking ===")
+    rerank_comparison = evaluate_rerank_comparison(golden, on_event=on_event)
+    print("\n=== Comparando clasificador entrenado vs. RAG top-1 ===")
+    classifier_comparison = evaluate_classifier_vs_rag(golden, on_event=on_event)
+    print("\n=== Midiendo consistencia (misma pregunta, 5 corridas) ===")
+    consistency = evaluate_consistency(golden[0]["question"], n_runs=5)
 
     snapshot = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -56,6 +68,13 @@ def generate() -> dict:
         "rag_recall": comparison["rag_recall"],
         "keyword_recall": comparison["keyword_recall"],
         "compare_items": events["compare_item"],
+        "no_rerank_recall": rerank_comparison["no_rerank_recall"],
+        "rerank_recall": rerank_comparison["rerank_recall"],
+        "rerank_compare_items": events["rerank_compare_item"],
+        "classifier_accuracy": classifier_comparison["classifier_accuracy"],
+        "rag_top1_accuracy": classifier_comparison["rag_top1_accuracy"],
+        "classifier_items": events["classifier_item"],
+        "consistency": consistency,
     }
     with open(config.RESULTS_SNAPSHOT_PATH, "w", encoding="utf-8") as f:
         json.dump(snapshot, f, ensure_ascii=False, indent=2)

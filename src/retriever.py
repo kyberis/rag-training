@@ -59,6 +59,15 @@ def get_chunks(session_id: str | None = None) -> list[dict]:
     return _get_store(session_id).metadata
 
 
+def get_store(session_id: str | None = None) -> SimpleVectorStore:
+    """Public access to the active store (session-scoped or the shared
+    global one) — for callers that need direct access to vectors/metadata
+    instead of going through retrieve()'s embed-then-search flow (see
+    classifier.py, trained directly on the store's own chunk vectors).
+    """
+    return _get_store(session_id)
+
+
 def get_default_store() -> SimpleVectorStore:
     """The shared global index (the one living in index/vectors.npy), with
     no session involved. The only public access point to that store for

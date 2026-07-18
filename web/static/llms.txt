@@ -6,7 +6,7 @@
 
 > A real, runnable Retrieval-Augmented Generation (RAG) system, built as an educational demo. It answers Spanish-language patient-support questions over a synthetic healthcare-booking knowledge base, and exposes every step of the pipeline — chunking, embeddings, vector search, prompt assembly, generation — live in the UI, with the actual source code browsable inline. No signup; the "Explore" and "Metrics" tabs work with zero API key.
 
-- [Live demo](https://learning.trefolio.com/RAG): the full interactive app — Build the Index, Ask a Question (Classic vs. Agentic RAG), Explore the Data, Metrics & Concepts.
+- [Live demo](https://learning.trefolio.com/RAG): the full interactive app — Build the Index, Ask a Question (Classic vs. Agentic RAG), Prompting Lab, Training, Explore the Data, Metrics & Concepts.
 - [Source code (GitHub)](https://github.com/kyberis/rag-training): the complete, runnable project — Python backend (`src/`, `eval/`, `web/server.py`) and the plain HTML/CSS/JS frontend (`web/static/`), no framework, no build step.
 - [README](https://github.com/kyberis/rag-training/blob/main/README.md): a full written walkthrough of the design decisions — why each piece exists, not just what it does.
 
@@ -16,7 +16,11 @@ What it teaches, concretely:
 - **Generation**: prompt assembly with cited context, streamed token-by-token answers.
 - **Two retrieval strategies compared head-to-head**: the real embeddings retriever vs. a naive keyword-overlap baseline (`src/keyword_retriever.py`) — same golden dataset, same index, Recall@K measured for both, to make the value of semantic search a number instead of a claim.
 - **Agentic RAG**: a bounded ReAct loop (native OpenAI tool calling) where the model decides for itself whether to call a `retrieve_context` tool zero, one, or several times before answering — compared side by side against the single-pass Classic mode.
-- **Evaluation**: Recall@K and Faithfulness (LLM-as-a-judge) against a 10-question golden dataset, with per-question results, run live or shown from a committed snapshot.
+- **Evaluation**: Recall@K and Faithfulness (LLM-as-a-judge) against a 10-question golden dataset, with per-question results, run live or shown from a committed snapshot. Also: consistency/robustness (same question, 5 runs, temperature=0) and per-technique latency.
+- **Tokenization**: the real gpt-4o-mini tokenizer (`tiktoken`, `o200k_base`), run locally, no API call — makes the word-count-as-token-proxy used for chunking a measured ratio instead of an assumption.
+- **Prompting Lab**: zero-shot vs. few-shot vs. chain-of-thought on the same retrieved context; a temperature/sampling playground; structured outputs (`json_schema` mode) vs. free text, with hand-rolled schema validation.
+- **Reranking**: an LLM-based pointwise reranker (single batched Structured Outputs call, not a second provider like Cohere) between retrieval and generation, with a measured Recall@K comparison with vs. without it.
+- **Training**: an illustrative fine-tuning walkthrough (real JSONL shape, real KB data, zero training/cost) plus a genuinely real training loop — a numpy-only nearest-centroid classifier trained on the indexed chunk vectors, compared against RAG's top-1 retrieval on held-out questions.
 
 ## Notes for AI agents and crawlers
 

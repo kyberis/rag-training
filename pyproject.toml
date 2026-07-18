@@ -3,12 +3,13 @@ name = "rag-training"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-    "openai>=1.30.0",
+    "openai>=1.40.0",
     "numpy>=1.24",
     "python-dotenv>=1.0.0",
     "fastapi>=0.110.0",
     "uvicorn>=0.29.0",
     "redis>=5.0.0",
+    "tiktoken>=0.7.0",
 ]
 
 [tool.vercel]
