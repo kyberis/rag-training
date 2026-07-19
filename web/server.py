@@ -43,6 +43,7 @@ from src import (
     config,
     embeddings,
     finetune_illustration,
+    langgraph_agent,
     prompting_lab,
     rag,
     reranker,
@@ -51,6 +52,7 @@ from src import (
 )
 from src.agentic_rag import answer_agentic
 from src.ingest import build_index, load_documents
+from src.langgraph_agent import answer_agentic_langgraph
 from src.rag import answer
 from src.retriever import get_default_store, get_store, set_store, similarity_from_indexed_chunk
 from src.session_store import SESSION_TTL_SECONDS, get_session_store
@@ -70,6 +72,7 @@ CODE_REGISTRY: dict[str, list] = {
     "vector_store_search": [vector_store.SimpleVectorStore.search],
     "prompt": [rag._build_prompt],
     "agentic_loop": [agentic_rag.answer_agentic],
+    "langgraph_agent": [langgraph_agent.answer_agentic_langgraph, langgraph_agent._build_graph],
     "tokenizer": [tokenizer_demo.tokenize_text],
     "prompting_variants": [prompting_lab.run_prompt_variants, prompting_lab._variant_prompt],
     "structured_output": [prompting_lab.run_structured_output, prompting_lab._validate_structured],
@@ -143,6 +146,7 @@ _SESSION_START_IP_HOURLY_LIMIT = 20  # generous — costs no OpenAI money, just 
 _GLOBAL_DAILY_UNIT_BUDGET = 300  # shared "OpenAI call" budget per day, all visitors combined
 _ASK_UNITS = 2                  # 1 embedding call + 1 chat completion call
 _AGENTIC_ASK_UNITS = 9          # worst case: up to 4 chat completions + up to 3+ embedding calls (bounded ReAct loop)
+_AGENTIC_COMPARE_UNITS = _AGENTIC_ASK_UNITS * 2  # hand-rolled + LangGraph runs, same worst case each
 _INGEST_UNITS = 1               # chunks are embedded in a single batch call
 _EVAL_UNITS = 30                # 10 embeddings + 10 answers + 10 judge calls
 _COMPARE_UNITS = 10             # 10 embeddings only — keyword search makes no OpenAI calls
@@ -778,6 +782,46 @@ def ask_agentic_stream(
 
     def target(on_event):
         return answer_agentic(question, top_k=top_k, on_event=on_event, api_key=api_key, session_id=x_session_id)
+
+    return run_pipeline_as_sse(target)
+
+
+@app.get("/api/ask/agentic-compare/stream")
+def ask_agentic_compare_stream(
+    request: Request,
+    question: str,
+    top_k: int | None = None,
+    x_openai_key: str | None = Header(default=None, alias="X-OpenAI-Key"),
+    x_session_id: str | None = Header(default=None, alias="X-Session-Id"),
+):
+    """Runs the same question through both the hand-rolled ReAct agent
+    (src/agentic_rag.py) and the LangGraph rebuild of it
+    (src/langgraph_agent.py) — see the "Agent Frameworks" tab. Both runs
+    happen inside this one request/rate-limit hit (not two separate
+    fetches), same shape as the other combined comparison routes
+    (/api/eval/compare/stream, /api/eval/rerank/stream): each event is
+    tagged with which run it belongs to (`run: "handrolled"|"langgraph"`)
+    so the frontend can route it to the right side of the UI.
+    """
+    if not _has_usable_index(x_session_id):
+        return _immediate_error(
+            "No hay índice construido todavía. Andá a la pestaña 'Build the Index' y construilo primero."
+        )
+    if not x_openai_key:
+        limit_error = _check_rate_limit(request, units=_AGENTIC_COMPARE_UNITS, is_eval=False)
+        if limit_error:
+            return _immediate_error(limit_error)
+    api_key = _resolve_api_key(x_openai_key)
+    if not api_key:
+        return _immediate_error(NO_KEY_MESSAGE)
+
+    def target(on_event):
+        def tag(run_name):
+            return lambda name, payload: on_event(name, {**payload, "run": run_name})
+
+        handrolled = answer_agentic(question, top_k=top_k, on_event=tag("handrolled"), api_key=api_key, session_id=x_session_id)
+        langgraph_result = answer_agentic_langgraph(question, top_k=top_k, on_event=tag("langgraph"), api_key=api_key, session_id=x_session_id)
+        return {"handrolled": handrolled, "langgraph": langgraph_result}
 
     return run_pipeline_as_sse(target)
 

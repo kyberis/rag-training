@@ -5,7 +5,10 @@ Deliberately the same input/output contract as src/rag.py::answer() —
 that way the server and frontend can treat both modes symmetrically. The
 real difference is on the inside: here the model decides, via native
 OpenAI tool calling (no LangChain or LangGraph, same as the rest of the
-project), whether to call retrieve() zero, one, or several times before
+RAG pipeline — see src/langgraph_agent.py and the "Agent Frameworks" tab
+for the one deliberate, labeled exception, which rebuilds this exact
+agent with LangGraph specifically to make the tradeoff measurable),
+whether to call retrieve() zero, one, or several times before
 answering — the ReAct pattern (Reason + Act) the Metrics tab's glossary
 mentions.
 

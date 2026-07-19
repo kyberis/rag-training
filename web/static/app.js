@@ -607,6 +607,17 @@ function updateAskAvailability(data) {
       promptHint.textContent = !hasUsableKey ? missingKeyHint : "Build the index first, in the \"Build the Index\" tab.";
     }
   });
+
+  // Agent Frameworks: same gating as Ask/Prompting Lab.
+  const langgraphBtn = $("#btn-langgraph-run");
+  const langgraphHint = $("#langgraph-disabled-hint");
+  if (langgraphBtn) {
+    langgraphBtn.disabled = disabled;
+    if (langgraphHint) {
+      langgraphHint.hidden = !disabled;
+      langgraphHint.textContent = !hasUsableKey ? missingKeyHint : "Build the index first, in the \"Build the Index\" tab.";
+    }
+  }
 }
 
 $("#byok-save").addEventListener("click", () => {
@@ -1632,6 +1643,204 @@ $("#question-input").addEventListener("keydown", (e) => {
   if (e.key === "Enter") askQuestion();
 });
 
+// =================================================== AGENT FRAMEWORKS =====
+//
+// The same bounded ReAct agent as the Ask tab's "Agentic RAG" mode, run
+// twice for one question — once hand-rolled (src/agentic_rag.py, reused
+// as-is), once via LangGraph's StateGraph (src/langgraph_agent.py) — in a
+// single request (/api/ask/agentic-compare/stream) so it's one rate-limit
+// hit, not two. Every event from that stream carries a `run:
+// "handrolled"|"langgraph"` tag; only the langgraph run drives the graph
+// diagram, since the hand-rolled run has no graph to animate.
+
+let graphLoopCount = 0;
+let langgraphResult = null;
+let handrolledResult = null;
+
+function setGraphNodeState(node, state) {
+  const el = $(`.graph-node[data-node="${node}"]`);
+  if (!el) return;
+  el.classList.remove("active", "done");
+  if (state) el.classList.add(state);
+}
+
+function setGraphEdgeState(edge, state) {
+  // Backend sends "agent->tools" etc.; data-edge attributes use hyphens
+  // (arrows are awkward in HTML attribute values).
+  const key = edge.replace("->", "-");
+  const el = $(`.graph-edge[data-edge="${key}"]`);
+  if (!el) return;
+  el.classList.remove("taken", "done");
+  if (state) el.classList.add(state);
+  if (key === "tools-agent" && state === "taken") {
+    graphLoopCount += 1;
+    const badge = $("#graph-loop-count");
+    if (graphLoopCount > 1) {
+      badge.hidden = false;
+      badge.textContent = `looped ×${graphLoopCount}`;
+    }
+  }
+}
+
+function resetAgentFrameworksUI() {
+  graphLoopCount = 0;
+  langgraphResult = null;
+  handrolledResult = null;
+  $$(".graph-node").forEach((n) => n.classList.remove("active", "done"));
+  $$(".graph-edge").forEach((e) => e.classList.remove("taken", "done"));
+  $("#graph-loop-count").hidden = true;
+  $("#graph-node-detail-agent").textContent = "—";
+  $("#graph-node-detail-tools").textContent = "—";
+  $("#langgraph-answer-text").textContent = "—";
+  $("#langgraph-sources-chips").innerHTML = "";
+  $("#handrolled-answer-text").textContent = "—";
+  $("#handrolled-sources-chips").innerHTML = "";
+  $("#agentic-frameworks-comparison-content").innerHTML = "";
+  $("#log-langgraph").innerHTML = "";
+}
+
+function renderSourceChips(containerId, sources) {
+  const chips = $(`#${containerId}`);
+  chips.innerHTML = "";
+  sources.forEach((src) => {
+    const chip = document.createElement("span");
+    chip.className = "chip";
+    chip.textContent = src;
+    chips.appendChild(chip);
+  });
+}
+
+function maybeRenderAgentFrameworksComparison() {
+  if (!langgraphResult || !handrolledResult) return;
+  const content = $("#agentic-frameworks-comparison-content");
+  content.innerHTML = "";
+  const grid = document.createElement("div");
+  grid.className = "ask-comparison-grid";
+
+  [["Hand-rolled", handrolledResult], ["LangGraph", langgraphResult]].forEach(([label, r]) => {
+    const col = document.createElement("div");
+    col.className = "ask-comparison-col";
+    const h4 = document.createElement("h4");
+    h4.textContent = label;
+    col.appendChild(h4);
+
+    const stats = [
+      ["Searches", r.iterations],
+      ["Chunks retrieved", r.chunks.length],
+      ["Sources cited", r.sources.length],
+      ["Elapsed", r.elapsed_ms != null ? `${r.elapsed_ms}ms` : "—"],
+      ["Dependencies added", label === "LangGraph" ? "~25.5MB (langgraph + langchain-core)" : "0"],
+    ];
+    stats.forEach(([statLabel, value]) => {
+      const row = document.createElement("div");
+      row.className = "ask-comparison-stat";
+      const span = document.createElement("span");
+      span.textContent = statLabel;
+      const strong = document.createElement("strong");
+      strong.textContent = value;
+      row.appendChild(span);
+      row.appendChild(strong);
+      col.appendChild(row);
+    });
+    grid.appendChild(col);
+  });
+
+  content.appendChild(grid);
+}
+
+function runAgentFrameworksCompare() {
+  const question = $("#langgraph-question-input").value.trim();
+  if (!question) return;
+  const btn = $("#btn-langgraph-run");
+  btn.disabled = true;
+  resetAgentFrameworksUI();
+  const t0 = performance.now();
+
+  const url = `/api/ask/agentic-compare/stream?question=${encodeURIComponent(question)}`;
+  const es = new FetchEventSource(url, { headers: authHeaders() });
+  const close = () => {
+    es.close();
+    btn.disabled = false;
+    checkStatus();
+  };
+
+  // ---- LangGraph-only: drive the live graph diagram ----
+  es.addEventListener("graph_node_start", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-langgraph", "graph_node_start", payload);
+    if (payload.run !== "langgraph") return;
+    setGraphNodeState(payload.node, "active");
+  });
+  es.addEventListener("graph_node_done", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-langgraph", "graph_node_done", payload);
+    if (payload.run !== "langgraph") return;
+    setGraphNodeState(payload.node, "done");
+  });
+  es.addEventListener("graph_edge_taken", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-langgraph", "graph_edge_taken", payload);
+    if (payload.run !== "langgraph") return;
+    setGraphEdgeState(payload.edge, "taken");
+    if (payload.edge === "agent->end") setGraphNodeState("end", "done");
+  });
+  es.addEventListener("agent_tool_call", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-langgraph", "agent_tool_call", payload);
+    if (payload.run !== "langgraph") return;
+    $("#graph-node-detail-tools").textContent = `"${payload.query}"`;
+  });
+
+  // ---- both runs: log everything, capture each run's final result ----
+  ["question_received", "agent_iteration_start", "embedding_query_start", "embedding_query_done",
+    "search_start", "search_done", "agent_no_tool_call", "agent_answer"].forEach((name) => {
+    es.addEventListener(name, (e) => appendLog("log-langgraph", name, JSON.parse(e.data)));
+  });
+
+  es.addEventListener("agent_done", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-langgraph", "agent_done", payload);
+    const result = { answer: payload.answer, sources: payload.sources, chunks: payload.chunks, iterations: payload.iterations, elapsed_ms: payload.elapsed_ms };
+    if (payload.run === "langgraph") {
+      langgraphResult = result;
+      $("#langgraph-answer-text").textContent = payload.answer;
+      renderSourceChips("langgraph-sources-chips", payload.sources);
+      // If it never looped, agent->end still needs marking done for a
+      // clean final frame (agent_no_tool_call fires but that's a log
+      // event, not a node-state one).
+      setGraphNodeState("agent", "done");
+    } else {
+      handrolledResult = result;
+      $("#handrolled-answer-text").textContent = payload.answer;
+      renderSourceChips("handrolled-sources-chips", payload.sources);
+    }
+    maybeRenderAgentFrameworksComparison();
+  });
+
+  es.addEventListener("agent_error", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-langgraph", "agent_error", payload, true);
+    const target = payload.run === "langgraph" ? "#langgraph-answer-text" : "#handrolled-answer-text";
+    $(target).textContent = `Error: ${payload.message}`;
+  });
+
+  es.addEventListener("pipeline_done", (e) => {
+    appendLog("log-langgraph", "pipeline_done", JSON.parse(e.data));
+    recordTechniqueLatency("agentic_compare", Math.round(performance.now() - t0));
+    close();
+  });
+  es.addEventListener("pipeline_error", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-langgraph", "pipeline_error", payload, true);
+    $("#langgraph-answer-text").textContent = `Error: ${payload.message}`;
+    close();
+  });
+
+  es.onerror = () => close();
+}
+
+$("#btn-langgraph-run").addEventListener("click", runAgentFrameworksCompare);
+
 // ============================================================ EXPLORE =====
 //
 // Lets you browse the raw documents, see exactly how each one was cut into
@@ -2370,6 +2579,7 @@ const TECHNIQUE_LABELS = {
   prompting_temperature: "Prompting Lab: temperature",
   prompting_structured: "Prompting Lab: structured output",
   classifier_compare: "Classifier vs. RAG comparison",
+  agentic_compare: "Agent Frameworks: hand-rolled vs. LangGraph",
 };
 
 function recordTechniqueLatency(name, ms) {
@@ -2477,7 +2687,7 @@ function showAppShell() {
 // Falls back to the normal first-tab landing when there's no hash, or it
 // doesn't match a known tab.
 
-const VALID_HASH_TABS = ["init", "ask", "prompting", "training", "explore", "metrics"];
+const VALID_HASH_TABS = ["init", "ask", "prompting", "training", "explore", "metrics", "langgraph"];
 
 function parseHashTarget() {
   const hash = location.hash.replace(/^#/, "");

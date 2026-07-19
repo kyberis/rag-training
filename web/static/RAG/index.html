@@ -249,6 +249,7 @@
   <button class="tab-btn" data-tab="training">4. Training</button>
   <button class="tab-btn" data-tab="explore">5. Explore the Data</button>
   <button class="tab-btn" data-tab="metrics">6. Metrics &amp; Concepts</button>
+  <button class="tab-btn" data-tab="langgraph">7. Agent Frameworks</button>
 </nav>
 
 <main>
@@ -448,7 +449,10 @@
             context — that decision doesn't exist here. This is <strong>classic (non-agentic)
             RAG</strong>.</p>
           <p>It's built with the raw <span class="term-tooltip" tabindex="0" data-tooltip="No framework — just client.chat.completions.create() and client.embeddings.create() from the openai Python package. See src/rag.py and src/embeddings.py in the Explore tab's code viewer.">OpenAI Python SDK</span> —
-            <strong>no LangChain, no LangGraph</strong>, no agent framework of any kind.</p>
+            <strong>no LangChain, no LangGraph</strong>, no agent framework of any kind — same as
+            every mode in this Ask tab. The one deliberate exception lives in its own
+            <a href="#tab-langgraph" data-tab-link="langgraph"><strong>Agent Frameworks</strong></a>
+            tab, built specifically to make that tradeoff measurable rather than asserted.</p>
           <p>Switch to <a href="#tab-ask" data-tab-link="ask" data-mode="agentic"><strong>Agentic
             RAG</strong></a> above to see a real version of this: <code>retrieve()</code> exposed
             as a <span class="term-tooltip" tabindex="0" data-tooltip="Giving an LLM a set of callable functions with typed arguments, so it can decide during generation which ones to call and with what input — e.g. OpenAI function calling / tool calling.">tool</span>
@@ -831,6 +835,7 @@
           <button class="chip-btn" data-code-key="vector_store_search">Searching vectors</button>
           <button class="chip-btn" data-code-key="prompt">Building the prompt</button>
           <button class="chip-btn" data-code-key="agentic_loop">Agentic loop</button>
+          <button class="chip-btn" data-code-key="langgraph_agent">LangGraph agent</button>
           <button class="chip-btn" data-code-key="tokenizer">Tokenizer</button>
           <button class="chip-btn" data-code-key="prompting_variants">Prompt variants</button>
           <button class="chip-btn" data-code-key="structured_output">Structured output</button>
@@ -1089,6 +1094,86 @@
             demo with fake data.</li>
         </ul>
       </div>
+    </div>
+  </section>
+
+  <!-- ======================= TAB: AGENT FRAMEWORKS ======================= -->
+  <section id="tab-langgraph" class="tab-panel">
+    <p class="hint">
+      Every other tab on this page deliberately uses <strong>no agent framework</strong> — native
+      OpenAI tool calling only (see the "Agentic RAG" mode in the Ask tab, built by hand in
+      <code>src/agentic_rag.py</code>). This tab is the one labeled exception: the exact same
+      bounded ReAct agent — same system prompt, same <code>retrieve_context</code> tool, same
+      model — rebuilt with <a href="https://github.com/langchain-ai/langgraph" target="_blank" rel="noopener">LangGraph</a>'s <code>StateGraph</code> instead of a hand-rolled loop, so you can
+      watch the same behavior expressed two ways and see what the framework actually costs and
+      buys — measured, not asserted.
+    </p>
+
+    <div class="panel">
+      <div class="panel-row">
+        <input id="langgraph-question-input" type="text" placeholder="Type your question (in Spanish)…" autocomplete="off" value="¿Cómo cancelo un turno y puedo pedir reembolso?" />
+        <button id="btn-langgraph-run" class="btn btn-primary">Run both</button>
+      </div>
+      <p id="langgraph-disabled-hint" class="muted small" hidden>
+        Build the index first, in the "Build the Index" tab.
+      </p>
+
+      <h3>The graph, live
+        <span class="info-icon" tabindex="0" data-tooltip="Two nodes: agent (one chat-completion call, decides whether to search) and tools (runs retrieve_context). A conditional edge sends agent to either tools or straight to the answer; tools always loops back to agent. Nodes and edges light up in real time as the LangGraph run actually executes them.">ⓘ</span>
+      </h3>
+      <div class="graph-diagram" id="graph-diagram">
+        <svg class="graph-svg" viewBox="0 0 100 60" preserveAspectRatio="none">
+          <defs>
+            <marker id="graph-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M0,0 L10,5 L0,10 z" class="graph-arrowhead"></path>
+            </marker>
+          </defs>
+          <path class="graph-edge" data-edge="agent-tools" d="M 28,29 L 28,37" marker-end="url(#graph-arrow)"></path>
+          <path class="graph-edge graph-edge-loop" data-edge="tools-agent" d="M 15,42 C -2,42 -2,18 15,18" marker-end="url(#graph-arrow)"></path>
+          <path class="graph-edge" data-edge="agent-end" d="M 41,20 L 67,20" marker-end="url(#graph-arrow)"></path>
+        </svg>
+        <div class="graph-node" data-node="agent">
+          <div class="graph-node-icon">🤖</div>
+          <div class="graph-node-label">agent</div>
+          <div class="graph-node-detail" id="graph-node-detail-agent">—</div>
+        </div>
+        <div class="graph-node" data-node="tools">
+          <div class="graph-node-icon">🔍</div>
+          <div class="graph-node-label">tools</div>
+          <div class="graph-node-detail" id="graph-node-detail-tools">—</div>
+        </div>
+        <div class="graph-node graph-node-end" data-node="end">
+          <div class="graph-node-icon">💬</div>
+          <div class="graph-node-label">answer</div>
+        </div>
+        <div id="graph-loop-count" class="graph-loop-count" hidden></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>LangGraph run — answer</h3>
+          <div id="langgraph-answer-text" class="answer-box">—</div>
+          <div id="langgraph-sources-chips" class="chips"></div>
+        </div>
+        <div class="card">
+          <h3>Hand-rolled run — answer
+            <span class="info-icon" tabindex="0" data-tooltip="src/agentic_rag.py — the same agent, same everything, just orchestrated with a plain Python for-loop instead of a graph.">ⓘ</span>
+          </h3>
+          <div id="handrolled-answer-text" class="answer-box">—</div>
+          <div id="handrolled-sources-chips" class="chips"></div>
+        </div>
+      </div>
+
+      <div id="agentic-frameworks-comparison" class="card ask-comparison">
+        <h3>Hand-rolled vs. LangGraph — same question</h3>
+        <p class="muted small">Real numbers from the run above, not illustrative.</p>
+        <div id="agentic-frameworks-comparison-content"></div>
+      </div>
+
+      <details class="log-details">
+        <summary>Raw event log</summary>
+        <div id="log-langgraph" class="event-log"></div>
+      </details>
     </div>
   </section>
 </main>

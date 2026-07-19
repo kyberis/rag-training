@@ -252,6 +252,83 @@ main { padding: 0 1.5rem 3rem; max-width: 1100px; margin: 0 auto; }
 
 .parrow { align-self: center; color: var(--text-muted); font-size: 1rem; padding: 0 0.1rem; }
 
+/* --- agent graph diagram (Agent Frameworks tab) ---
+   Node boxes are absolutely-positioned HTML (so they can hold real text
+   and reuse the .pbox visual language), the SVG beneath them is unitless
+   (viewBox="0 0 100 60") purely for the connecting arrows, including the
+   curved tools->agent loop-back edge a linear .pipeline can't express.
+   Node/edge coordinates below are hand-derived from that same 100x60
+   space so the two layers never drift apart on resize. */
+.graph-diagram {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  aspect-ratio: 100 / 60;
+  margin: 0.75rem 0 1.25rem;
+}
+
+.graph-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+
+.graph-edge {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 0.6;
+  transition: stroke 0.2s;
+}
+/* context-stroke makes the arrowhead automatically match whichever path
+   is currently pointing at it via marker-end, so .taken below doesn't
+   need to separately recolor the (shared, <defs>-only) marker. */
+.graph-arrowhead { fill: context-stroke; }
+
+.graph-edge.taken { stroke: var(--accent); animation: graph-edge-pulse 1.1s ease-in-out infinite; }
+.graph-edge.done { stroke: var(--ok); }
+@keyframes graph-edge-pulse {
+  0%, 100% { stroke-width: 0.6; }
+  50% { stroke-width: 1.3; }
+}
+
+.graph-node {
+  position: absolute;
+  width: 26%;
+  height: 30%;
+  left: 28%;
+  top: 33.3%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-align: center;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.graph-node[data-node="tools"] { top: 76.7%; }
+.graph-node[data-node="end"], .graph-node-end { left: 80%; top: 33.3%; }
+
+.graph-node-icon { font-size: 1.2rem; }
+.graph-node-label { font-size: 0.78rem; color: var(--text-muted); font-family: var(--mono); }
+.graph-node-detail { font-size: 0.68rem; color: var(--text-muted); margin-top: 0.15rem; padding: 0 0.3rem; }
+
+.graph-node.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  animation: pulse 1.1s ease-in-out infinite;
+}
+.graph-node.active .graph-node-label { color: var(--text); }
+.graph-node.done { border-color: var(--ok); }
+.graph-node.done .graph-node-label { color: var(--text); }
+
+.graph-loop-count {
+  position: absolute;
+  left: 3%;
+  top: 55%;
+  font-size: 0.72rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+
 /* --- cards / grid --- */
 .grid-2 {
   display: grid;
