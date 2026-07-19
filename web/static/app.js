@@ -1683,6 +1683,7 @@ function setGraphEdgeState(edge, state) {
 }
 
 function resetAgentFrameworksUI() {
+  $("#langgraph-progress").textContent = "";
   graphLoopCount = 0;
   langgraphResult = null;
   handrolledResult = null;
@@ -1754,6 +1755,7 @@ function runAgentFrameworksCompare() {
   const btn = $("#btn-langgraph-run");
   btn.disabled = true;
   resetAgentFrameworksUI();
+  $("#langgraph-progress").textContent = "Running the hand-rolled agent first…";
   const t0 = performance.now();
 
   const url = `/api/ask/agentic-compare/stream?question=${encodeURIComponent(question)}`;
@@ -1792,9 +1794,14 @@ function runAgentFrameworksCompare() {
   });
 
   // ---- both runs: log everything, capture each run's final result ----
-  ["question_received", "agent_iteration_start", "embedding_query_start", "embedding_query_done",
+  ["agent_iteration_start", "embedding_query_start", "embedding_query_done",
     "search_start", "search_done", "agent_no_tool_call", "agent_answer"].forEach((name) => {
     es.addEventListener(name, (e) => appendLog("log-langgraph", name, JSON.parse(e.data)));
+  });
+  es.addEventListener("question_received", (e) => {
+    const payload = JSON.parse(e.data);
+    appendLog("log-langgraph", "question_received", payload);
+    if (payload.run === "langgraph") $("#langgraph-progress").textContent = "Hand-rolled done — now running the LangGraph agent…";
   });
 
   es.addEventListener("agent_done", (e) => {
@@ -1826,12 +1833,14 @@ function runAgentFrameworksCompare() {
 
   es.addEventListener("pipeline_done", (e) => {
     appendLog("log-langgraph", "pipeline_done", JSON.parse(e.data));
+    $("#langgraph-progress").textContent = "Done.";
     recordTechniqueLatency("agentic_compare", Math.round(performance.now() - t0));
     close();
   });
   es.addEventListener("pipeline_error", (e) => {
     const payload = JSON.parse(e.data);
     appendLog("log-langgraph", "pipeline_error", payload, true);
+    $("#langgraph-progress").textContent = `Error: ${payload.message}`;
     $("#langgraph-answer-text").textContent = `Error: ${payload.message}`;
     close();
   });
