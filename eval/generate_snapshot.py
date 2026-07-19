@@ -30,6 +30,7 @@ from .evaluate import (
     evaluate_rerank_comparison,
     evaluate_retrieval_comparison,
     load_golden_dataset,
+    load_rerank_hard_examples,
 )
 
 
@@ -50,8 +51,8 @@ def generate() -> dict:
     faithfulness = evaluate_faithfulness(golden, on_event=on_event)
     print("\n=== Comparando embeddings vs. keyword search ===")
     comparison = evaluate_retrieval_comparison(golden, on_event=on_event)
-    print("\n=== Comparando con vs. sin reranking ===")
-    rerank_comparison = evaluate_rerank_comparison(golden, on_event=on_event)
+    print("\n=== Comparando con vs. sin reranking (preguntas difíciles a propósito) ===")
+    rerank_comparison = evaluate_rerank_comparison(load_rerank_hard_examples(), top_k=1, on_event=on_event)
     print("\n=== Comparando clasificador entrenado vs. RAG top-1 ===")
     classifier_comparison = evaluate_classifier_vs_rag(golden, on_event=on_event)
     print("\n=== Midiendo consistencia (misma pregunta, 5 corridas) ===")

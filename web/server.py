@@ -35,6 +35,7 @@ from eval.evaluate import (
     evaluate_rerank_comparison,
     evaluate_retrieval_comparison,
     load_golden_dataset,
+    load_rerank_hard_examples,
 )
 from src import (
     agentic_rag,
@@ -154,7 +155,7 @@ _PROMPT_VARIANTS_UNITS = 4      # 1 embedding + 3 chat completions (zero-shot / 
 _PROMPT_TEMPERATURE_UNITS = 1 + len(config.TEMPERATURE_PLAYGROUND_VALUES) * config.TEMPERATURE_SAMPLES  # 1 embedding + n_samples chat calls per temperature
 _PROMPT_STRUCTURED_UNITS = 3    # 1 embedding + 1 structured call + 1 free-text call
 _RERANK_UNITS = 1               # 1 extra batched chat call on top of _ASK_UNITS
-_RERANK_COMPARE_UNITS = 20      # 10 embeddings + 10 batched rerank calls
+_RERANK_COMPARE_UNITS = 16      # 8 embeddings + 8 batched rerank calls (rerank_hard_examples.json)
 _CLASSIFIER_COMPARE_UNITS = 10  # 10 embeddings only — classifier prediction makes no OpenAI call
 _CONSISTENCY_RUNS = 5
 _CONSISTENCY_UNITS = _CONSISTENCY_RUNS * _ASK_UNITS  # 5 runs x (1 embedding + 1 chat call) each
@@ -578,11 +579,14 @@ def eval_rerank_stream(
     x_openai_key: str | None = Header(default=None, alias="X-OpenAI-Key"),
     x_session_id: str | None = Header(default=None, alias="X-Session-Id"),
 ):
-    """Recall@K with vs. without the LLM-based reranker (src/reranker.py),
-    on the same over-retrieved candidate pool both times — see
-    eval.evaluate.evaluate_rerank_comparison. ~20 OpenAI calls (10
-    embeddings + 10 batched rerank calls), shares the eval daily free-run
-    budget with the other /api/eval/*/stream routes.
+    """Recall@1 with vs. without the LLM-based reranker (src/reranker.py),
+    on a small set of questions curated because plain cosine similarity
+    gets the top-ranked source wrong on all of them (see
+    eval.evaluate.load_rerank_hard_examples) — the main 10-question golden
+    dataset is already correct at top-1 for every question, so it can't
+    show the reranker's effect at all. ~16 OpenAI calls (8 embeddings + 8
+    batched rerank calls), shares the eval daily free-run budget with the
+    other /api/eval/*/stream routes.
     """
     if not _has_usable_index(x_session_id):
         return _immediate_error(
@@ -597,8 +601,8 @@ def eval_rerank_stream(
         return _immediate_error(NO_KEY_MESSAGE)
 
     def target(on_event):
-        golden = load_golden_dataset()
-        return evaluate_rerank_comparison(golden, on_event=on_event, api_key=api_key, session_id=x_session_id)
+        hard_examples = load_rerank_hard_examples()
+        return evaluate_rerank_comparison(hard_examples, top_k=1, on_event=on_event, api_key=api_key, session_id=x_session_id)
 
     return run_pipeline_as_sse(target)
 

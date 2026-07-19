@@ -35,6 +35,7 @@ from src.reranker import rerank_chunks
 from src.retriever import get_store, retrieve
 
 GOLDEN_PATH = Path(__file__).resolve().parent / "golden_dataset.json"
+RERANK_HARD_EXAMPLES_PATH = Path(__file__).resolve().parent / "rerank_hard_examples.json"
 
 JUDGE_PROMPT = """Sos un evaluador estricto. Te doy un CONTEXTO y una RESPUESTA.
 Respondé UNICAMENTE "SI" si cada afirmacion de la RESPUESTA esta respaldada
@@ -51,6 +52,20 @@ RESPUESTA:
 
 def load_golden_dataset() -> list[dict]:
     with open(GOLDEN_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def load_rerank_hard_examples() -> list[dict]:
+    """A separate, small set of questions curated specifically because
+    plain cosine similarity gets the top-ranked chunk's source wrong on
+    all of them (verified by hand against this project's real index) —
+    the main golden_dataset.json's 10 questions are all comfortably
+    correct even at top-1, which means Recall@K there stays at 100%
+    with or without reranking and can't show the reranker's effect at
+    all. These questions exist to make that effect measurable instead of
+    disclaimed away. See eval/rerank_hard_examples.json.
+    """
+    with open(RERANK_HARD_EXAMPLES_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -152,6 +167,12 @@ def evaluate_rerank_comparison(
     difference is whether that pool gets re-scored and re-sorted before
     being cut down to top_k, so any measured lift is the reranker's actual
     effect, not an artifact of comparing different candidate sets.
+
+    Called with top_k=1 against load_rerank_hard_examples() (not the main
+    golden dataset) — the reranker's job is fixing *ranking* mistakes,
+    which only shows up at a strict cutoff on questions plain cosine
+    similarity actually gets wrong at rank 1. At the main dataset's usual
+    top_k=4, both sides saturate at 100% and there's nothing to measure.
     """
     top_k = top_k or config.TOP_K
     no_rerank_hits = 0

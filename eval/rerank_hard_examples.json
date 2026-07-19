@@ -1,0 +1,34 @@
+[
+  {
+    "question": "¿La clínica puede ver mis datos personales completos?",
+    "expected_sources": ["07_account_privacy.md"]
+  },
+  {
+    "question": "¿El paciente puede saber si el médico tiene sanciones o denuncias previas?",
+    "expected_sources": ["05_doctor_profiles_faq.md"]
+  },
+  {
+    "question": "¿Qué pasa si quiero ver mis facturas de consultas anteriores?",
+    "expected_sources": ["04_payments_insurance.md"]
+  },
+  {
+    "question": "¿Cómo se notifica a un paciente si su médico se enfermó y no puede atender?",
+    "expected_sources": ["02_cancellation_policy.md"]
+  },
+  {
+    "question": "¿El sistema recuerda al paciente que tiene un turno próximo?",
+    "expected_sources": ["09_no_show_policy.md"]
+  },
+  {
+    "question": "¿Qué pasa si cancelo la teleconsulta faltando poco tiempo?",
+    "expected_sources": ["03_teleconsultation.md"]
+  },
+  {
+    "question": "¿Puedo reservar sin tener obra social?",
+    "expected_sources": ["01_booking_policy.md"]
+  },
+  {
+    "question": "¿Qué pasa si dos médicos de la misma clínica atienden al mismo paciente?",
+    "expected_sources": ["08_clinic_admin_tims.md"]
+  }
+]

@@ -948,13 +948,14 @@
 
       <div class="card">
         <h3>Reranking: with vs. without
-          <span class="info-icon" tabindex="0" data-tooltip="Runs evaluate_rerank_comparison() from eval/evaluate.py: 8 candidates are retrieved by cosine similarity for each golden question, then Recall@4 is measured on that same pool both before and after the LLM-based reranker (src/reranker.py) re-scores and re-sorts it.">ⓘ</span>
+          <span class="info-icon" tabindex="0" data-tooltip="Runs evaluate_rerank_comparison() from eval/evaluate.py against eval/rerank_hard_examples.json — 8 questions curated specifically because plain cosine similarity ranks the wrong document first on every one of them. 8 candidates are retrieved for each, then Recall@1 (is the very top pick correct?) is measured on that same pool both before and after the LLM-based reranker (src/reranker.py) re-scores and re-sorts it.">ⓘ</span>
         </h3>
         <p class="muted small">
-          Same 8-candidate pool both times — the only difference is whether it gets re-scored by
-          the chat model before being cut down to the top 4. On a 9-document knowledge base where
-          Recall@K is already high, don't expect a dramatic lift: the number below is what actually
-          happened, not a sales pitch.
+          The main 10-question golden dataset is already correct at top-1 for every question, so
+          measuring it here would show 100% either way and prove nothing. These 8 questions instead
+          were deliberately chosen because cosine similarity alone gets the top-ranked source
+          wrong on all of them — Recall@1, same 8-candidate pool both times, the only difference is
+          whether it gets re-scored by the chat model first.
         </p>
         <p id="rerank-compare-source-label" class="muted small"></p>
         <div class="panel-row">
@@ -965,11 +966,11 @@
         <div class="grid-2" id="rerank-compare-scores">
           <div class="metric-tile">
             <div class="metric-value" id="metric-no-rerank-recall">—</div>
-            <div class="metric-label">Recall@K — without reranking</div>
+            <div class="metric-label">Recall@1 — without reranking</div>
           </div>
           <div class="metric-tile">
             <div class="metric-value" id="metric-rerank-recall">—</div>
-            <div class="metric-label">Recall@K — with reranking</div>
+            <div class="metric-label">Recall@1 — with reranking</div>
           </div>
         </div>
 
