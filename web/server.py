@@ -140,7 +140,7 @@ _eval_ip_hits: dict[str, list[float]] = {}
 _session_start_ip_hits: dict[str, list[float]] = {}
 _global_units: list[tuple[float, int]] = []
 
-_IP_HOURLY_LIMIT = 5           # free ask/ingest requests per IP per hour
+_IP_DAILY_LIMIT = 20           # free ask/ingest requests per IP per day
 _EVAL_IP_DAILY_LIMIT = 1       # free live evaluation runs per IP per day
 _SESSION_START_IP_HOURLY_LIMIT = 20  # generous — costs no OpenAI money, just bounds Redis/memory session storage
 _GLOBAL_DAILY_UNIT_BUDGET = 300  # shared "OpenAI call" budget per day, all visitors combined
@@ -185,11 +185,12 @@ def _check_rate_limit(request: Request, units: int, is_eval: bool) -> str | None
                 )
         else:
             hits = _ip_hits.setdefault(ip, [])
-            hits[:] = [t for t in hits if now - t < 3600]
-            if len(hits) >= _IP_HOURLY_LIMIT:
+            hits[:] = [t for t in hits if now - t < 86400]
+            if len(hits) >= _IP_DAILY_LIMIT:
                 return (
-                    f"Ya usaste tus {_IP_HOURLY_LIMIT} acciones gratis de esta hora en esta demo "
-                    "pública. Pegá tu propia OpenAI API key arriba para seguir sin esperar."
+                    f"Ya usaste tus {_IP_DAILY_LIMIT} acciones gratis de hoy en esta demo "
+                    "pública. Pegá tu propia OpenAI API key arriba para seguir sin esperar, o "
+                    "volvé mañana."
                 )
 
         _global_units[:] = [(t, u) for t, u in _global_units if now - t < 86400]
